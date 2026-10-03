@@ -2553,6 +2553,15 @@ body.roller-open main {
         font-size: 14.5px;
     }
 
+    /* the book a feat comes from, after its name */
+    & .lu-src {
+        margin-left: 8px;
+        font-size: 11px;
+        font-weight: normal;
+        letter-spacing: .04em;
+        color: var(--muted);
+    }
+
     & span {
         font-size: 12.5px;
         line-height: 1.4;

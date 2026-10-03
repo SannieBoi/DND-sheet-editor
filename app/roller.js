@@ -32,10 +32,11 @@ const opt = key => state.opts[key] ||= {};
 // ---- Dice ---------------------------------------------------------------------------
 // Effects (effects.js: conditions, Killing Marble, your own) that apply to a roll. Advantage and Disadvantage from any
 // sources cancel each other out, as the rules say.
-function withEffects(roll, chosen) {
+// more: other sources of Advantage (War Caster on a concentration save)
+function withEffects(roll, chosen, more = []) {
   const fx = window.effects ? window.effects.forRoll(roll) : { mod: 0, parts: [], adv: [], dis: [], autoFail: [], notes: [] };
-  const adv = chosen === 'adv' || fx.adv.length > 0, dis = chosen === 'dis' || fx.dis.length > 0;
-  const mode = adv && dis ? null : adv ? 'adv' : dis ? 'dis' : null, why = [...new Set([...fx.adv, ...fx.dis])];
+  const adv = chosen === 'adv' || fx.adv.length > 0 || more.length > 0, dis = chosen === 'dis' || fx.dis.length > 0;
+  const mode = adv && dis ? null : adv ? 'adv' : dis ? 'dis' : null, why = [...new Set([...fx.adv, ...more, ...fx.dis])];
   const tag = (adv && dis ? 'Advantage and Disadvantage cancel' : MODES[mode] || '') + (why.length ? ` (${why.join(', ')})` : '');
   return { ...fx, mode, tag: tag || null };
 }
@@ -52,11 +53,17 @@ function d20Test(mode, bonus, extraDice = [], critOn = null, fx = null) {
 }
 
 // parts: [{ label, n, d, flat, type, gwf (1s and 2s count as 3), savage (roll twice, keep higher), explode (max extra dice),
-//          max (every die counts as its highest face: Supreme Healing) }]
+//          max (every die counts as its highest face: Supreme Healing), critExtra (more dice on a crit: Piercer),
+//          reroll1 (a 1 is rolled again: Tavern Brawler), min2 (1s count as 2: Elemental Adept) }]
 function rollDamage(parts, crit = false) {
   const out = parts.map(p => {
-    const n = p.n * (crit ? 2 : 1);
-    const once = () => Array.from({ length: n }, () => { const v = p.max ? p.d : rnd(p.d); return { v, d: p.d, shown: p.gwf && v < 3 ? 3 : v, gwf: p.gwf && v < 3 }; });
+    const n = p.n * (crit ? 2 : 1) + (crit && p.n && p.critExtra ? p.critExtra : 0);
+    const once = () => Array.from({ length: n }, () => {
+      let v = p.max ? p.d : rnd(p.d), re = false;
+      if (p.reroll1 && v === 1) { v = rnd(p.d); re = true; }
+      const gwf = p.gwf && v < 3, min2 = !gwf && p.min2 && v < 2;
+      return { v, d: p.d, shown: gwf ? 3 : min2 ? 2 : v, gwf, min2, re };
+    });
     let dice = once(), alt = null;
     if (p.savage && n) {
       alt = once();
@@ -86,6 +93,17 @@ function parseExpr(s) {
 const lvlRow = key => { const c = (C.classes || []).find(x => x.key === key); return c && D.classes[key].levels[c.level - 1]; };
 const hasClass = key => (C.classes || []).some(x => x.key === key);
 const knows = name => (C.spells || []).some(x => x.spell.name === name);
+const hasFeat = name => (C.feats || []).includes(name);
+// Elemental Adept's damage types, from the sheet's text: "Elemental Adept (Fire)", "Elemental Adept: WIS +1; Fire (Wizard 4): ..."
+const ADEPT = ['acid', 'cold', 'fire', 'lightning', 'thunder'];
+const adeptTypes = () => !hasFeat('Elemental Adept') ? [] : [...Object.values(C).filter(v => typeof v === 'string').join('\n')
+  .matchAll(/Elemental Adept\b[:\s(]*([^()\n]*)/g)].flatMap(m => ADEPT.filter(t => new RegExp(`\\b${t}\\b`, 'i').test(m[1])));
+// Unarmed Strike die from Unarmed Fighting (d6, d8 with nothing in hand), Tavern Brawler (d4) or Martial Arts: the biggest
+function unarmedDie(o) {
+  const sides = [hasFeat('Unarmed Fighting') ? (o.bare ?? true ? 8 : 6) : 0, hasFeat('Tavern Brawler') ? 4 : 0, lvlRow('monk')?.martialArtsDie || 0];
+  const best = Math.max(...sides);
+  return best ? '1d' + best : null;
+}
 // Cleric level of a Life Domain Cleric (0 otherwise): the subclass or its features are named somewhere on the sheet
 function lifeCleric() {
   const c = (C.classes || []).find(x => x.key === 'cleric');
@@ -137,7 +155,7 @@ function attackItems() {
 function attackSetup(item, o) {
   const w = item.weapon, sc = C.spellcasting, tier = M.cantripTier(C.level || 1);
   const casting = o.trueStrike || o.shillelagh ? { ability: sc.ability, mod: sc.mod } : null;
-  const die = o.shillelagh ? ['1d8', '1d10', '1d12', '2d6'][tier - 1] : null;
+  const die = o.shillelagh ? ['1d8', '1d10', '1d12', '2d6'][tier - 1] : w?.unarmed ? unarmedDie(o) : null;
   const a = w && M.weaponAttack(w, item.magic, { twoHanded: o.twoHanded, casting, die });
   const sheetHit = parseHit(item.sheetBonus), sheetDmg = parseDamageText(item.sheetDamage, w?.dmg);
   let toHit, parts, source;
@@ -161,6 +179,26 @@ function attackSetup(item, o) {
   const arms = ['right', 'left'].filter(a => o['arm:' + a] ?? (a === 'right' || twoHands));
   if (window.sheetState?.mode === 'marble') for (const a of ['left', 'right']) toggle('arm:' + a, `${cap(a)} arm`, { on: arms.includes(a) });
   if (w?.versatile) toggle('twoHanded', `Two-handed (${w.versatile})`); // weaponAttack switches the die
+  // Feats. On by default where they nearly always apply (Great Weapon Master, Dueling, Thrown Weapon Fighting when thrown)
+  const pb = C.profBonus || 2, heavy = !!w?.props.includes('heavy'), notes = [];
+  const featBonus = (id, label, on, part) => { toggle(id, label, { on: o[id] ?? on }); if (o[id] ?? on) extras.push(part); };
+  if (heavy && hasFeat('Great Weapon Master')) featBonus('gwm', `Great Weapon Master +${pb}`, true, { label: 'Great Weapon Master', n: 0, d: 0, flat: pb, type });
+  if (w && melee && !w.unarmed && !twoHands && hasFeat('Dueling')) featBonus('dueling', 'Dueling +2 (no other weapon)', true, { label: 'Dueling', n: 0, d: 0, flat: 2, type });
+  if (w?.props.includes('thrown') && hasFeat('Thrown Weapon Fighting')) featBonus('thrown', 'Thrown +2', w.kind === 'ranged', { label: 'Thrown Weapon Fighting', n: 0, d: 0, flat: 2, type });
+  if (w && melee && hasFeat('Charger') && toggle('charge', 'Charge +1d8 (moved 10 ft straight)')) extras.push({ label: 'Charger', n: 1, d: 8, flat: 0, type });
+  if (w?.unarmed && hasFeat('Unarmed Fighting')) toggle('bare', 'No weapon or Shield in hand (d8)', { on: o.bare ?? true });
+  if (parts[0] && hasFeat('Piercer') && type === 'piercing') parts[0].critExtra = 1;
+  if (parts[0] && w?.unarmed && hasFeat('Tavern Brawler')) parts[0].reroll1 = true;
+  const note = (feat, text) => { if (hasFeat(feat)) notes.push([feat, text]); };
+  if (w?.kind === 'ranged') note('Sharpshooter', 'ignore Half and Three-Quarters Cover; no Disadvantage at long range or with an enemy within 5 ft.');
+  if (/crossbow/i.test(w?.name || '')) note('Crossbow Expert', 'ignore Loading; no Disadvantage with an enemy within 5 ft.');
+  if (heavy && melee) note('Great Weapon Master', 'after a Critical Hit or dropping a creature to 0 HP, one more attack with this weapon as a Bonus Action.');
+  if (type === 'piercing') note('Piercer', 'once per turn reroll one damage die and keep either; a Critical Hit adds one more die (counted in).');
+  if (type === 'slashing') note('Slasher', "once per turn a hit cuts the target's Speed by 10 ft; a Critical Hit gives it Disadvantage on attacks until your next turn.");
+  if (type === 'bludgeoning') note('Crusher', 'once per turn a hit can push the target 5 ft; after a Critical Hit, attacks against it have Advantage until your next turn.');
+  if (w && (['Quarterstaff', 'Spear'].includes(w.name) || heavy && w.props.includes('reach'))) note('Polearm Master', 'after the Attack action, a Bonus Action attack with the other end (1d4 Bludgeoning).');
+  if (w?.unarmed) note('Tavern Brawler', 'once per turn a hit can also push the target 5 ft; 1s on the damage die are rolled again.');
+  if (w && melee) note('Shield Master', `after a hit, bash with your Shield: STR save DC ${8 + (C.mods?.STR ?? 0) + pb} or pushed 5 ft or knocked Prone.`);
   const rage = lvlRow('barbarian');
   if (rage && ability === 'STR' && toggle('rage', `Rage +${rage.rageDamage}`)) extras.push({ label: 'Rage', n: 0, d: 0, flat: rage.rageDamage, type });
   const rogue = lvlRow('rogue');
@@ -184,7 +222,7 @@ function attackSetup(item, o) {
   toHit += parseInt(o.extraHit, 10) || 0;
   for (const p of parseDamageText(o.extraDmg, type) || []) extras.push({ label: 'Extra', ...p });
   for (const p of window.effects?.forRoll({ kind: 'damage', ability, arms }).parts || []) extras.push({ label: p.name, n: 0, d: 0, flat: p.mod, type });
-  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, source, melee, w, arms };
+  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, source, melee, w, arms, notes };
 }
 
 const knownSpells = () => (C.spells || []).map(x => x.spell);
@@ -208,7 +246,7 @@ const unitOf = s => s.cantrip === 'beams' ? 'Beam' : s.name === 'Magic Missile' 
 // what: 'cast' | 'heal' | 'damage' | 'crit' (the last two for riders such as Divine Smite) | 'start' (just cast it, no rolls)
 function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
   const slot = Math.max(s.level, o.slot || s.level), r = M.spellRoll(s, slot), sc = C.spellcasting;
-  const parts = r.parts.map(p => ({ ...p, label: s.name }));
+  const adept = adeptTypes(), parts = r.parts.map(p => ({ ...p, label: s.name, min2: adept.includes(p.type) }));
   if (parts[0] && s.explode) parts[0].explode = Math.max(0, sc.mod);
   if (parts[0] && o.agonizing) parts[0].flat += sc.mod;
   for (const p of parseDamageText(o.extraDmg, parts[0]?.type) || []) parts.push({ label: 'Extra', ...p });
@@ -259,7 +297,8 @@ async function cast(s, slot, run) {
 // kind: 'Check' | 'Save' | 'Initiative' (a DEX check). Other scripts hear about it through the 'test-rolled' event
 // (e.g. the Becoming Marble page compares a CON save with its spread DCs).
 function rollTest(title, kind, mod, mode, extraDice = [], ability = null, skill = null, purpose = null) {
-  const fx = withEffects({ kind: kind === 'Save' ? 'save' : 'check', ability, skill }, mode), test = d20Test(mode, mod, extraDice, null, fx);
+  const more = purpose === 'concentration' && hasFeat('War Caster') ? ['War Caster'] : [];
+  const fx = withEffects({ kind: kind === 'Save' ? 'save' : 'check', ability, skill }, mode, more), test = d20Test(mode, mod, extraDice, null, fx);
   log({ title, tag: [kind, fx.tag], lines: [{ test }],
     again: m => rollTest(title, kind, mod, m, extraDice, ability, skill, purpose), test: true, mode });
   document.dispatchEvent(new CustomEvent('test-rolled', { detail: { kind, ability, skill, title, total: test.total, autoFail: test.autoFail.length > 0, purpose } }));
@@ -292,8 +331,9 @@ function d20Face(v, cls) {
       '<path class="e" d="M50 22 78 68 22 68Z M50 3 50 22 M93 27 50 22 M93 27 78 68 M93 73 78 68 M50 97 78 68 M50 97 22 68 M7 73 22 68 M7 27 22 68 M7 27 50 22"/></svg>' },
   h('b', { class: 'v' }, v));
 }
-const dieChip = x => h('span', { class: `die d${x.d}${x.dropped ? ' dropped' : ''}${x.gwf ? ' gwf' : ''}${x.boom ? ' boom' : ''}`,
-  'data-final': x.shown, 'data-d': x.d, title: x.gwf ? `Rolled ${x.v}: Great Weapon Fighting counts it as 3` : x.boom ? 'Extra die from rolling an 8' : null },
+const dieChip = x => h('span', { class: `die d${x.d}${x.dropped ? ' dropped' : ''}${x.gwf || x.min2 ? ' gwf' : ''}${x.boom ? ' boom' : ''}`,
+  'data-final': x.shown, 'data-d': x.d, title: x.gwf ? `Rolled ${x.v}: Great Weapon Fighting counts it as 3` : x.min2 ? 'Rolled 1: Elemental Adept counts it as 2'
+    : x.re ? 'Rolled a 1 and rolled again (Tavern Brawler)' : x.boom ? 'Extra die from rolling an 8' : null },
 h('b', { class: 'v' }, x.shown));
 
 function testView(t) {
@@ -417,6 +457,7 @@ function attackView() {
     h('div', { class: 'nums' }, numBox('To hit', fmt(s.toHit), s.ability), numBox('Damage', partsText(s.parts), C.critRange < 20 ? `crit on ${C.critRange}–20` : null)),
     h('p', { class: 'src' }, s.source),
     mastery ? h('p', { class: 'mastery' }, h('b', {}, `Mastery: ${cap(w.mastery)}. `), D.masteryProperties[w.mastery]) : null,
+    s.notes.map(([feat, text]) => h('p', { class: 'mastery' }, h('b', {}, `${feat}: `), text)),
     effectsNote({ kind: 'attack', ability: s.ability, arms: s.arms }),
     h('div', { class: 'chips' }, s.toggles.map(t => [chip(t.label, t.on ?? o[t.id], async () => {
       const on = !(t.on ?? o[t.id]);

@@ -20,6 +20,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 |---|---|
 | lib/pdf.min.js, lib/pdf.worker.min.js (pdf.js 3.11.174), lib/pdf-lib.min.js | render PDF / write PDF. Never edit. |
 | data/ rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
+| data/feats-more.js, data/species-more.js | push onto `DND.feats` / `DND.species` (load right after feats.js / species.js): the rest of the 2024 PHB (58 feats, Aasimar) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public lists; "see the book"): feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light; and EVERY species on D&D Beyond's species list (user asked for all, no duplicates; official + third-party). 140 feats, 172 species. Species dedupe rule is in the comment above `listed` (2024 > newest official > third-party; MotM-replaced names dropped; 2014 ability bonuses stripped from trait names). New fields documented in their headers (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
 | app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). |
@@ -31,7 +32,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (209 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (262 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -105,6 +106,13 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - Spell roll data fixes vs the source: Conjure Animals is a DEX save, Weird has no half damage, "Thunderwavea" typo.
   Spells without damage/healing only carry their attack type / save. A few feature summaries (Hamstring Blow -15 ft, Horde
   Breaker, Divine Smite upcasting, Obscure cost, Trip/Withdraw) come from knowledge of the 2024 rules (source text cut off).
+- More feats/species (user's choice, 2026-10-03: PHB + the four 2024 books, full automation, public on GitHub). The PHB
+  part is from Claude's knowledge of the 2024 PHB (D&D Beyond pages are paywalled), summaries in our own words. The other
+  books' entries are `brief`: never invent their rules; only what the public list shows. Guessed prerequisites (Greater
+  Mark needs its Mark) are `prerequisite.text` (shown, not checked). `unsure` ability increases let any score be picked.
+- Feats on the sheet: `findFeats` (script.js) skips text that holds a feat's name without being it: longer feat names
+  ("Great Weapon Master" is not "Weapon Master", "Greater Mark of X" not "Mark of X") and the feat's `unless`
+  ("Blessed Healer", "Healer's Kit", "Protection from", "Poisoner's Kit", "Speedy Recovery", "Unarmored Defense"). Species match by name or `aliases`; the longest match wins.
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. Nothing from the full PHB.
 
 ## Rules decisions (keep consistent)
@@ -118,6 +126,14 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   lowered on the sheet (compared with the value at focus, on 'change') -> damage box (editable) + DC max(10, half), max 30
   -> "Roll CON save" (purpose 'concentration'); failure asks; the tray shows the last save. 0 HP and marble head 10
   (Unconscious) ask too.
+- Feats in the roller (roller.js attackSetup): switches on the attack card, on by default where they nearly always apply:
+  Great Weapon Master (+PB, Heavy weapons), Dueling (+2, one-handed melee), Thrown Weapon Fighting (+2; on for ranged-kind
+  thrown weapons), Charger (+1d8, off). Unarmed die = biggest of Unarmed Fighting d6/d8 ("No weapon or Shield" switch),
+  Tavern Brawler d4 (reroll 1s), Martial Arts. Piercer: crit adds one die (`critExtra`). Elemental Adept: spell damage
+  of the type(s) read from the sheet text after "Elemental Adept" (up to "(" or a line end) counts 1s as 2 (`min2`).
+  War Caster: concentration saves (purpose 'concentration') get Advantage via withEffects' `more`. Reminder notes
+  (`s.notes`) for Sharpshooter, Crossbow Expert, GWM's Hew, Piercer, Slasher, Crusher, Polearm Master, Tavern Brawler,
+  Shield Master (with its DC).
 - Life Domain healing (roller.js `lifeCleric/lifeHealing`): Cleric 3+ whose sheet names "Life Domain" / "Disciple of Life"
   (or "Life" in the Class/Subclass box). Healing spells cast with a slot (not cantrips, not temp HP): Disciple of Life
   +2 + slot level as its own part (chip, on by default); Cleric 6 Blessed Healer = note (you regain 2 + slot level);
@@ -165,14 +181,22 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Species Traits box; weapons/tools/languages -> their official boxes, else Proficiencies; armor -> official armor checkboxes.
   A choice not made writes nothing (listed under "Still to choose"). Sheet text uses no → / ✓ (WinAnsi).
 - Weapon Mastery counts come from `weaponMastery.countByLevel` (Rogue/Paladin/Ranger have no table column for it).
+- Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too. The picker has search + a book filter
+  (`L.ui[f.id]`; the list refills without a full render so the search box keeps focus). Prerequisites checked: level,
+  ability (`any` = one of), Spellcasting, armor training (`hasArmor`: official armor boxes, else classes' `armorTraining` /
+  multiclass armor, armor feats on the sheet, Proficiencies text; no class = yes). Feat sub-picks use ids `f.id + ':sk'
+  (skills) ':sx' (skill or Expertise) ':ex' (Expertise) ':dt' (damage type) ':wm' (mastery) ':tools' ':fs' (feat spells)`.
+  Tough: +2 per level on the sheet, +2 x level when taken; Boon of Fortitude +40; feat `grants` go through collect().
 
 ## Testing
-- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
+- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal|feats|concentration`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
   XHR (works with --allow-file-access-from-files), fills a Wizard 4 and levels it.
 - concentration.test.js: casting/switching/Undo, conditions, tray form, damage saves (incl. Again), 0 HP, Rage, marble head 10.
-  heal.test.js: Life Domain healing.
+  heal.test.js: Life Domain healing. feats.test.js: feat/species data counts, reading feats/species off a sheet (incl.
+  look-alike text), roller feats (GWM, Dueling, Piercer crit, Tavern Brawler, Elemental Adept, War Caster), level-up feats
+  (prerequisites, search, Tough HP, Resilient, Speedy, Fey Touched spells, an `unsure` feat).
 - levelup.test.js: named sheets (ASI, Dwarf HP, mastery, rolled HP, Wizard spells/slots/swap, multiclass Wizard and Rogue,
   cancel) + a synthetic official sheet. sweep.test.js: every class 1 -> 20 and multiclassing into every class, apply, no errors.
 - Headless virtual time races ahead while the browser waits for real work (reading a dropped file, pdf.js): waiting with
@@ -198,5 +222,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - Level up, not done yet: Magic Initiate's spellcasting ability isn't asked; swapping an invocation / Magic Initiate spell
   on level-up isn't offered; the classic sheet's "prepared" circles next to spell lines aren't ticked; Wizard spellbook vs
   prepared isn't told apart on the sheet.
-- PHB-only content (Toll the Dead text/rolls, GWM, Sharpshooter, other subclasses) is outside the source.
+- PHB-only spells (Toll the Dead text/rolls) and subclasses are still outside the data.
+- The four other 2024 books' feats/species are names only (`brief`). If the user pastes a feat's text, fill in its
+  summary/choices/automation and drop `brief`.
+- Feat automation not done: Lucky,
+  Mage Slayer, Sentinel, Heavy Armor Master, Poisoner, Spell Sniper range, Medium Armor Master AC.
 - Marble: per-hour progression is not automated (manual +). Tail debuffs are Claude's suggestion, awaiting user feedback.

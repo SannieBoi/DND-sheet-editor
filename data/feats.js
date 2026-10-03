@@ -2,7 +2,7 @@
    prerequisite: { minimum_level, feature_named, ability: { STR: 13, DEX: 13, any: true } }   repeatable: can be taken more than once.
    abilityIncrease: { amount, choose: [abilities] (pick one; 'any' = any ability), max } - Ability Score Improvement instead
    offers { options: [[2], [1, 1]], max: 20 } (+2 to one score or +1 to two).   choice: what the player picks (as in classes.js).
-   aliases: other spellings to recognise on a sheet.
+   aliases: other spellings to recognise on a sheet. unless: text holding the name that isn't the feat ("Unarmored Defense").
    Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, see CREDITS.md). Numbers and names come from the
    rules data; feature text is condensed into short plain-language summaries (not the book text). */
 window.DND = window.DND || {};
@@ -15,7 +15,7 @@ DND.feats = [
   {"name":"Ability Score Improvement","type":"general","prerequisite":{"minimum_level":4},"attackRelevant":false,"repeatable":true,"abilityIncrease":{"options":[[2],[1,1]],"max":20},"summary":"+2 to one ability score or +1 to two (max 20). Repeatable."},
   {"name":"Grappler","type":"general","prerequisite":{"minimum_level":4,"ability":{"STR":13,"DEX":13,"any":true}},"attackRelevant":true,"abilityIncrease":{"amount":1,"choose":["STR","DEX"],"max":20},"summary":"+1 STR or DEX (max 20). Once per turn an Unarmed Strike hit from the Attack action can both damage and grapple. Advantage on attacks against a creature you grapple; moving it costs no extra movement if it is your size or smaller."},
   {"name":"Archery","type":"fighting-style","prerequisite":{"feature_named":"Fighting Style"},"attackRelevant":true,"summary":"+2 bonus to attack rolls with Ranged weapons."},
-  {"name":"Defense","type":"fighting-style","prerequisite":{"feature_named":"Fighting Style"},"attackRelevant":false,"summary":"+1 AC while wearing Light, Medium or Heavy armor."},
+  {"name":"Defense","unless":"Unarmored Defense","type":"fighting-style","prerequisite":{"feature_named":"Fighting Style"},"attackRelevant":false,"summary":"+1 AC while wearing Light, Medium or Heavy armor."},
   {"name":"Great Weapon Fighting","type":"fighting-style","prerequisite":{"feature_named":"Fighting Style"},"attackRelevant":true,"summary":"When you roll damage for a Melee attack with a weapon held in two hands (it must have Two-Handed or Versatile), treat any 1 or 2 on a damage die as a 3."},
   {"name":"Two-Weapon Fighting","aliases":["Two Weapon Fighting"],"type":"fighting-style","prerequisite":{"feature_named":"Fighting Style"},"attackRelevant":true,"summary":"When you make the extra attack from a Light weapon, add your ability modifier to its damage if you aren't already."},
   {"name":"Boon of Combat Prowess","type":"epic-boon","prerequisite":{"minimum_level":19},"attackRelevant":true,"abilityIncrease":{"amount":1,"choose":"any","max":30},"summary":"+1 to one ability score (max 30). Peerless Aim: when you miss with an attack roll you can hit instead; once per turn (resets at the start of your next turn)."},

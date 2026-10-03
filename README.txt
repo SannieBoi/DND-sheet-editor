@@ -54,6 +54,11 @@ It asks if you're sure, then opens a window you can drag around by its title bar
    Constitution modifier is added, and Dwarven Toughness / Draconic Resilience too. You also gain a Hit Die.
 3. Features: every new feature with a short description, and any choices it needs: subclass, Ability Score Improvement
    or a feat, Fighting Style, skills, Expertise, Weapon Mastery, Eldritch Invocations, Metamagic, and so on.
+   Feats come from the free rules, the Player's Handbook (2024), Forge of the Artificer (Dragonmarks), Heroes of Faerûn and
+   Lorwyn. Search them or filter by book. Feats you can't take yet are greyed out with the reason (level, ability score,
+   armor training, Spellcasting). A feat's own choices appear under it: ability score, tools, spells (Fey Touched, Shadow
+   Touched, Ritual Caster), skills or Expertise, damage type, weapon mastery. Tough and Boon of Fortitude raise your Max HP,
+   Speedy your Speed, Resilient adds the saving throw, armor feats tick your armor training.
 4. Spells (spellcasters only): new cantrips and prepared spells (Wizards: spellbook spells too), an optional swap of one
    cantrip and one spell, always-prepared spells, and the new spell slots.
 5. Review: every change with a tick box. Untick anything you don't want. Nothing touches the sheet until you press
@@ -72,6 +77,11 @@ Disadvantage. There's no limit: roll as often as you like.
 - Save: any saving throw.
 - Initiative.
 - Dice: any dice you like, e.g. 2d6+3 or 4d6kh3 (roll 4d6, keep the highest 3).
+Feats on your sheet join in by themselves: Great Weapon Master (+Proficiency Bonus with Heavy weapons), Dueling (+2),
+Thrown Weapon Fighting, Charger (+1d8 when you charge), Unarmed Fighting and Tavern Brawler (bigger Unarmed Strike die),
+Piercer (one more die on a crit), Elemental Adept (1s count as 2 for your type), War Caster (Advantage on concentration
+saves). Each shows as a switch on the attack card, so you can turn it off. Sharpshooter, Crossbow Expert, Slasher, Crusher,
+Polearm Master and Shield Master show a short reminder on the card.
 Every roll goes into the log below with Again / Advantage / Disadvantage buttons. "Clear" empties the log.
 Times in the log are in 24-hour format.
 
@@ -106,8 +116,13 @@ the scores. The page is part of every download while the switch is on.
 
 8. NOT INCLUDED YET
 ------------------------------
-- Spells, feats and subclasses that are only in the Player's Handbook (e.g. Toll the Dead, Great Weapon Master,
-  Sharpshooter, subclasses beyond the one per class in the free rules). Level up lets you add their features yourself.
+- Species: all 172 on D&D Beyond (one per name) are recognised and suggested, but only the free-rules ones and the Aasimar
+  come with their rules. The others have their book and trait names only (that is all D&D Beyond shows without the
+  book); add what they do to your sheet yourself.
+- Feats from Forge of the Artificer, Heroes of Faerûn and Lorwyn come with their names, ability increases and the names
+  of their parts only. Their summaries say "see the book".
+- Spells and subclasses that are only in the Player's Handbook (e.g. Toll the Dead, subclasses beyond the one per class in
+  the free rules). Level up lets you add their features yourself.
 - Monsters, equipment other than weapons and armor, Warlock invocation effects in the roller (except Agonizing Blast),
   Bard instrument choices.
 

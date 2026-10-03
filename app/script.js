@@ -146,14 +146,28 @@ const cantripTier = lvl => lvl >= 17 ? 4 : lvl >= 11 ? 3 : lvl >= 5 ? 2 : 1;
 
 // The longest entry whose name words all appear in the text, so "Crossbow, light", "Longsword +1"
 // and "2 Daggers" still find Light Crossbow, Longsword and Dagger.
+// nameOf may give several names (aliases); the longest name that matches wins ("Lorwyn Changeling" over "Changeling")
 function findEntry(text, list, nameOf = e => e.name) {
   const have = words(text), has = w => have.some(h => h === w || h === w + 's' || h === w + 'es');
   let best = null, bestLen = 0;
   for (const e of list) {
-    const need = words(nameOf(e)), len = need.join(' ').length;
-    if (len > bestLen && need.every(has)) { best = e; bestLen = len; }
+    for (const name of [].concat(nameOf(e))) {
+      const need = words(name), len = need.join(' ').length;
+      if (len > bestLen && need.every(has)) { best = e; bestLen = len; }
+    }
   }
   return best;
+}
+const speciesNames = s => [s.name, ...s.aliases || []];
+
+// Feats named anywhere in the sheet's text. Text that holds a feat's name without being that feat is skipped: a longer
+// feat name ("Great Weapon Master" is not "Weapon Master") and the feat's own `unless` ("Blessed Healer", "Healer's Kit").
+const escRe = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function findFeats(allText) {
+  return D.feats.filter(f => {
+    const skip = [...D.feats.filter(o => o.name !== f.name && o.name.includes(f.name)).map(o => escRe(o.name)), f.unless].filter(Boolean).join('|');
+    return new RegExp('\\b' + escRe(f.name) + '\\b').test(skip ? allText.replace(new RegExp(skip, 'g'), '') : allText);
+  }).map(f => f.name);
 }
 
 // "Fighter 5", "Rogue 3 / Wizard 2", "Level 4 Cleric" -> [{ key, name, level }]
@@ -270,8 +284,8 @@ function readGameData() {
   c.level = c.classes.reduce((t, x) => t + x.level, 0) || (typeof c.level === 'number' ? c.level : null);
   if (typeof c.profBonus !== 'number') c.profBonus = D.rules.proficiencyBonusByLevel[Math.min(20, c.level || 1) - 1];
   const allText = Object.values(fields).filter(v => typeof v === 'string').join('\n');
-  c.feats = D.feats.filter(f => new RegExp('\\b' + f.name + '\\b').test(allText)).map(f => f.name);
-  c.speciesData = findEntry(c.race, D.species);
+  c.feats = findFeats(allText);
+  c.speciesData = findEntry(c.race, D.species, speciesNames);
   c.lineage = c.speciesData && findEntry(c.race, c.speciesData.subspecies, s => s.name.split(': ').pop());
   c.backgroundData = findEntry(c.background, D.backgrounds);
   c.mods = Object.fromEntries(Object.keys(D.rules.abilities).map(ab => [ab, abilityMod(ab.toLowerCase())]));
@@ -587,7 +601,7 @@ function attachSuggesters() {
   attachSuggest(fieldOf.classLevel, { token: true,
     list: () => Object.values(D.classes).map(c => ({ label: c.name, hint: `d${c.hitDie} · ${c.primaryAbility}` })) });
   attachSuggest(fieldOf.race, { list: () => D.species.flatMap(s => [
-    { label: s.name, hint: `${s.size} · ${s.speed} ft` },
+    { label: s.name, hint: s.brief ? s.source : `${s.size} · ${s.speed} ft${s.source ? ' · ' + s.source : ''}` },
     ...s.subspecies.map(l => ({ label: `${s.name} (${l.name.split(': ').pop()})`, hint: l.name.split(': ')[0] }))]) });
   attachSuggest(fieldOf.background, { list: () => D.backgrounds.map(b => ({ label: b.name, hint: `${b.abilityScores.join('/')} · ${b.feat}` })) });
 }

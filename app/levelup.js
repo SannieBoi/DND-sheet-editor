@@ -148,7 +148,21 @@ function numbers() {
 
 // ---- Feats -----------------------------------------------------------------------------------
 // The feats a feat choice can take: Ability Score Improvement and General feats also allow Origin feats (no prerequisite)
-const FEAT_CATS = { general: ['general', 'origin'], 'epic-boon': ['epic-boon', 'general', 'origin'], 'fighting-style': ['fighting-style'], origin: ['origin'] };
+// (Dragonmark feats count as feats you can take at those levels too.)
+const FEAT_CATS = { general: ['general', 'origin', 'dragonmark'], 'epic-boon': ['epic-boon', 'general', 'origin', 'dragonmark'],
+  'fighting-style': ['fighting-style'], origin: ['origin'] };
+const featOf = f => f.choice?.type === 'feat' && D.feats.find(x => x.name === L.picks[f.id]?.name) || null;
+// Armor training: the official sheet's armor boxes, else your classes (the first class's full training, later classes'
+// multiclass training), armor feats on the sheet and the Proficiencies text. Without a class it can't tell, so it says yes.
+function hasArmor(a) {
+  const box = S.map?.checks?.['armor' + a];
+  if (box) return !!S.get(box);
+  const [first, ...rest] = newClasses(), word = a === 'Shields' ? 'Shield' : a;
+  if (!first) return true;
+  return (D.classes[first.key].armorTraining || []).some(t => t.startsWith(word)) || rest.some(c => (D.classes[c.key].multiclass.armor || []).includes(a))
+    || C.feats.some(n => D.feats.find(x => x.name === n)?.grants?.armor?.includes(a))
+    || new RegExp(`\\b${a === 'Shields' ? 'shields?' : a + ' armor'}\\b`, 'i').test(textOf(C.proficiencies));
+}
 function blocked(f) {
   if (C.feats.includes(f.name) && !f.repeatable) return 'already taken';
   const p = f.prerequisite;
@@ -159,6 +173,7 @@ function blocked(f) {
     if (!(p.ability.any ? abs.some(ok) : abs.every(ok))) return `needs ${abs.map(a => `${a} ${p.ability[a]}`).join(p.ability.any ? ' or ' : ' and ')}`;
   }
   if (p.feature_named === 'Spellcasting' && !newClasses().some(c => D.classes[c.key].spellcasting)) return 'needs Spellcasting';
+  if (p.armor && !hasArmor(p.armor)) return `needs ${p.armor === 'Shields' ? 'Shield' : p.armor + ' armor'} training`;
   return null;
 }
 const featsFor = category => FEAT_CATS[category].flatMap(t => D.feats.filter(f => f.type === t));
@@ -184,7 +199,7 @@ function onePick(get, set, items, { after = null, compact = false } = {}) {
   return h('div', { class: 'lu-cards' + (compact ? ' compact' : '') }, items.map(it => {
     const on = get() === it.name;
     return [h('button', { class: 'lu-card' + (on ? ' on' : ''), disabled: !!it.off, title: compact && !on ? it.text : null,
-      onclick: () => { set(it.name); render(); } }, h('b', {}, it.name), h('span', {}, it.off ? `Can't take it: ${it.off}` : it.text)),
+      onclick: () => { set(it.name); render(); } }, h('b', {}, it.name, it.tag ? h('small', { class: 'lu-src' }, it.tag) : null), h('span', {}, it.off ? `Can't take it: ${it.off}` : it.text)),
     on && after?.length ? h('div', { class: 'lu-after' }, after) : null];
   }));
 }
@@ -199,7 +214,7 @@ function textsPick(id, count, label, placeholder = '') {
 
 // The picks that hold new skill proficiencies: skills choices, Skilled, the multiclass skill
 const skillPickIds = () => [...gains().flatMap(f => f.choice?.type === 'skills' ? [f.id]
-  : f.choice?.type === 'feat' && L.picks[f.id]?.name === 'Skilled' ? [f.id + ':sk'] : []), ...L.isNew ? ['mc:sk'] : []];
+  : ['skillsOrTools', 'skillExpert'].includes(featOf(f)?.choice?.type) ? [f.id + ':sk'] : []), ...L.isNew ? ['mc:sk'] : []];
 
 // Skill proficiencies: the ones you have already (or picked elsewhere this level) are greyed out
 function skillPick(id, count, from, title = 'Skill proficiencies') {
@@ -209,13 +224,15 @@ function skillPick(id, count, from, title = 'Skill proficiencies') {
 
 // Expertise: skills you are proficient in (or get this level) and don't have Expertise in yet
 function expertisePick(f) {
+  return [multiPick(f.id, f.choice.count, expertiseItems(f.choice.from), 'Expertise'), f.choice.languages ? textsPick(f.id + ':lang', f.choice.languages, 'language') : null];
+}
+// allSkills: proficient in everything anyway (Boon of Skill)
+function expertiseItems(from = SKILLS.map(s => s.name), allSkills = false) {
   const gained = new Set(skillPickIds().flatMap(id => L.picks[id] || []));
-  const from = f.choice.from || SKILLS.map(s => s.name);
-  const items = from.map(name => {
+  return from.map(name => {
     const lvl = profLevel('skill:' + name, skillAb(name));
-    return { name, off: lvl >= 2 ? 'has Expertise' : lvl < 1 && !gained.has(name) ? 'not proficient' : null };
+    return { name, off: lvl >= 2 ? 'has Expertise' : lvl < 1 && !gained.has(name) && !allSkills ? 'not proficient' : null };
   }).sort((a, b) => !!a.off - !!b.off);
-  return [multiPick(f.id, f.choice.count, items, 'Expertise'), f.choice.languages ? textsPick(f.id + ':lang', f.choice.languages, 'language') : null];
 }
 
 // Ability score buttons: "STR 16 -> 18". sel: the chosen abilities, n: how much each goes up
@@ -241,19 +258,42 @@ function asiPick(p, max) {
     }));
 }
 
+const FREE = 'Free rules';
+const bookOf = x => x.source || FREE;
 function featPick(f) {
   const ch = f.choice, p = L.picks[f.id] ||= { name: ch.category === 'general' ? 'Ability Score Improvement' : '' };
-  const items = featsFor(ch.category).map(x => ({ name: x.name, text: x.summary, off: blocked(x) }));
+  const ui = L.ui[f.id] ||= { q: '', book: '' }, all = featsFor(ch.category);
+  const items = all.map(x => ({ name: x.name, text: x.summary, off: blocked(x), tag: x.source ? bookOf(x).replace(/ \(2024\)$/, '') : null, book: bookOf(x) }));
   if (ch.or) items.push({ name: ch.or.name, text: `Instead of a feat: learn ${ch.or.cantrips} ${cap(ch.or.list)} cantrips; they count as ${cls().name} spells.` });
   items.push({ name: 'Other feat', text: 'A feat from another book: type its name below and add what it does yourself.' });
-  const feat = D.feats.find(x => x.name === p.name), ai = feat?.abilityIncrease, extra = [];
+  const feat = D.feats.find(x => x.name === p.name), ai = feat?.abilityIncrease, fc = feat?.choice, extra = [];
   if (p.name === 'Other feat') extra.push(h('input', { type: 'text', class: 'lu-wide', value: p.other || '', placeholder: 'Feat name', oninput: e => { p.other = e.target.value; } }));
   if (ai?.options) extra.push(asiPick(p, ai.max));
   else if (ai?.amount) {
     p.ab ||= [];
-    extra.push(h('div', { class: 'lu-pick' }, pickHead(`+${ai.amount} to one score (max ${ai.max})`),
-      abilityGrid(ai.choose, p.ab, ai.amount, ai.max, ab => { p.ab = [ab]; })));
+    const choose = ai.choose === 'noSaveProf' ? ABS.filter(ab => !profLevel('save:' + ab, ab) || p.ab.includes(ab)) : ai.choose;
+    extra.push(h('div', { class: 'lu-pick' }, pickHead(`+${ai.amount} to one score (max ${ai.max})${ai.unsure ? ": the feat list doesn't say which, check the book" : ai.choose === 'noSaveProf' ? ' whose save you lack' : ''}`),
+      abilityGrid(choose, p.ab, ai.amount, ai.max, ab => { p.ab = [ab]; })));
   }
+  if (fc?.type === 'tools') extra.push(textsPick(f.id + ':tools', fc.count, fc.kind.replace(/s$/, '')));
+  if (fc?.type === 'featSpells') {
+    if (fc.fixed.length) extra.push(h('p', { class: 'lu-note' }, `Always prepared: ${fc.fixed.join(', ')}.`));
+    const n = featSpellCount(fc);
+    if (n) extra.push(spellPick(f.id + ':fs', { count: n, levels: fc.levels, lists: null, schools: fc.schools, ritual: fc.ritual,
+      title: `${fc.ritual ? 'Ritual' : (fc.schools || []).join(' or ')} spell${n > 1 ? 's' : ''} (level ${fc.levels.join(', ')})` }));
+  }
+  if (fc?.type === 'skillOrExpertise') {
+    extra.push(multiPick(f.id + ':sx', fc.count, fc.from.map(name => {
+      const lvl = profLevel('skill:' + name, skillAb(name));
+      return { name, note: lvl === 1 ? 'Expertise' : lvl ? null : 'proficiency', off: lvl >= 2 ? 'has Expertise' : null };
+    }), 'Proficiency (Expertise if you have it)'));
+  }
+  if (fc?.type === 'skillExpert') {
+    extra.push(skillPick(f.id + ':sk', 1, SKILLS.map(s => s.name), 'Skill proficiency'), multiPick(f.id + ':ex', 1, expertiseItems(), 'Expertise'));
+  }
+  if (fc?.type === 'allSkills') extra.push(h('p', { class: 'lu-note' }, 'Proficiency in every skill you lack.'), multiPick(f.id + ':ex', 1, expertiseItems(undefined, true), 'Expertise'));
+  if (fc?.type === 'damageType') extra.push(multiPick(f.id + ':dt', fc.count, fc.from.map(name => ({ name })), fc.count > 1 ? 'Damage types' : 'Damage type'));
+  if (fc?.type === 'weaponMastery') extra.push(multiPick(f.id + ':wm', fc.count, weaponItems(), 'Weapon kind to master'));
   if (feat?.choice?.type === 'skillsOrTools') {
     extra.push(skillPick(f.id + ':sk', feat.choice.count, SKILLS.map(s => s.name), 'Skills (or tools, below)'),
       textsPick(f.id + ':tools', 1, 'tool', 'Tools instead of skills (optional)'));
@@ -269,8 +309,20 @@ function featPick(f) {
   if (ch.or && p.name === ch.or.name) {
     extra.push(spellPick(f.id + ':or', { count: ch.or.cantrips, levels: [0], lists: [cap(ch.or.list)], title: `${cap(ch.or.list)} cantrips` }));
   }
-  return onePick(() => p.name, n => { if (n !== p.name) dropSubPicks(f.id); p.name = n; }, items, { after: extra, compact: true });
+  // A long list: filter by book and search. The chosen feat always stays in view.
+  const books = [...new Set(all.map(bookOf))], box = h('div');
+  const fill = () => {
+    const q = ui.q.trim().toLowerCase();
+    const shown = items.filter(it => it.name === p.name || !it.book || (!ui.book || it.book === ui.book) && (!q || `${it.name} ${it.text}`.toLowerCase().includes(q)));
+    box.replaceChildren(onePick(() => p.name, n => { if (n !== p.name) dropSubPicks(f.id); p.name = n; }, shown, { after: extra, compact: true }));
+  };
+  fill();
+  return [books.length > 1 || all.length > 12 ? h('div', { class: 'lu-find' },
+    h('input', { type: 'search', class: 'lu-search', placeholder: 'Search feats', value: ui.q, oninput: e => { ui.q = e.target.value; fill(); } }),
+    books.length > 1 ? h('select', { onchange: e => { ui.book = e.target.value; fill(); } },
+      h('option', { value: '' }, 'All books'), books.map(b => h('option', { value: b, selected: ui.book === b }, b))) : null) : null, box];
 }
+const featSpellCount = fc => fc.count === 'pb' ? pbAt(charLevel()) : fc.count;
 // A different feat: forget the spells and skills picked for the old one
 function dropSubPicks(id) {
   for (const k of Object.keys(L.spells)) if (k.startsWith(id + ':')) delete L.spells[k];
@@ -282,6 +334,7 @@ function spellIdsOf(f) {
   if (['spell', 'spells', 'spellbook'].includes(t)) return [f.id];
   if (t !== 'feat' || !p?.name) return [];
   if (p.name === 'Magic Initiate') return [f.id + ':c', f.id + ':1'];
+  if (featOf(f)?.choice?.type === 'featSpells') return [f.id + ':fs'];
   return f.choice.or && p.name === f.choice.or.name ? [f.id + ':or'] : [];
 }
 
@@ -339,7 +392,9 @@ function pickText(f) {
     case 'feat': {
       if (!p?.name) return '';
       if (p.name === 'Other feat') return textOf(p.other);
-      const bits = [featScores(f).map(x => `${x.ab} +${x.n}`).join(', '), names(f.id + ':sk'), names(f.id + ':tools'), ...spellIdsOf(f).map(names)].filter(Boolean);
+      const fixed = featOf(f)?.choice?.fixed?.join(', ');
+      const bits = [featScores(f).map(x => `${x.ab} +${x.n}`).join(', '), ...[':sk', ':sx', ':ex', ':dt', ':wm', ':tools'].map(k => names(f.id + k)), fixed,
+        ...spellIdsOf(f).map(names)].filter(Boolean);
       return p.name + (bits.length ? ': ' + bits.join('; ') : '');
     }
     case 'option': return p || '';
@@ -442,7 +497,8 @@ const pickedSpells = except => new Set(Object.entries(L.spells)
 function spellPick(id, o) {
   const chosen = L.spells[id] ||= [], ui = L.ui[id] ||= { q: '', lvl: null };
   const have = known(), other = pickedSpells(id);
-  const pool = D.spells.filter(s => o.levels.includes(s.level) && s.classes.some(c => o.lists.includes(c)) && (!o.school || s.school === o.school));
+  const pool = D.spells.filter(s => o.levels.includes(s.level) && (!o.lists || s.classes.some(c => o.lists.includes(c))) && (!o.school || s.school === o.school)
+    && (!o.schools || o.schools.includes(s.school)) && (!o.ritual || s.ritual));
   const levels = [...new Set(pool.map(s => s.level))].sort((a, b) => a - b);
   const listEl = h('ul', { class: 'lu-spells' });
   const fill = () => {
@@ -483,6 +539,7 @@ function collect() {
     if (g.weapons) out.weapons.push(...g.weapons);
     if (g.armor) out.armor.push(...g.armor);
     if (g.languages) out.languages.push(...g.languages);
+    if (g.tools) out.tools.push(...g.tools);
     if (g.jackOfAllTrades) out.jack = f;
   };
   for (const f of gains()) {
@@ -494,9 +551,15 @@ function collect() {
     if (ch.type === 'languages') out.languages.push(...(p || []).filter(textOf));
     if (ch.type === 'option') { const o = ch.options.find(o => o.name === p); if (o?.grants) grants(o.grants, f); }
     if (ch.type === 'feat') {
+      const feat = featOf(f);
       out.scores.push(...featScores(f));
       out.skills.push(...L.picks[f.id + ':sk'] || []);
       out.tools.push(...(L.picks[f.id + ':tools'] || []).filter(textOf));
+      if (feat?.grants) grants(feat.grants, f);
+      if (feat?.grants?.saveForIncrease) out.saves.push(...featScores(f).map(x => x.ab));
+      for (const n of L.picks[f.id + ':sx'] || []) (profLevel('skill:' + n, skillAb(n)) ? out.expertise : out.skills).push(n);
+      out.expertise.push(...L.picks[f.id + ':ex'] || []);
+      if (feat?.choice?.type === 'allSkills') out.skills.push(...SKILLS.filter(x => !profLevel('skill:' + x.name, x.ability)).map(x => x.name));
     }
   }
   if (L.isNew) {
@@ -523,6 +586,12 @@ function hpGain() {
   const die = cls().hitDie, con = C.mods.CON ?? 0, rolled = L.hp.mode === 'roll' && L.hp.roll != null;
   const base = rolled ? L.hp.roll : D.rules.hitPoints.fixedByDie[die], extras = [];
   for (const f of C.speciesData?.features || []) if (f.grants?.hpPerLevel) extras.push([f.name, f.grants.hpPerLevel]);
+  for (const n of C.feats) { const g = D.feats.find(x => x.name === n)?.grants; if (g?.hpPerLevel) extras.push([n, g.hpPerLevel]); }
+  for (const f of gains()) { // a feat taken now: Tough counts every level so far, Boon of Fortitude adds 40
+    const g = featOf(f)?.grants;
+    if (g?.hpPerLevel && !C.feats.includes(L.picks[f.id].name)) extras.push([L.picks[f.id].name, g.hpPerLevel * charLevel()]);
+    if (g?.hpMax) extras.push([L.picks[f.id].name, g.hpMax]);
+  }
   const lvl = classLevel(), sub = subclass();
   if (sub.data) {
     for (const f of cls().subclass.features) {
@@ -690,6 +759,7 @@ function changes() {
   pushSpells('prepared', 'new prepared spell', plan.prepared);
   pushSpells('book', 'added to your spellbook', plan.book);
   for (const f of gains()) for (const id of spellIdsOf(f)) pushSpells(id, f.choice.type === 'feat' ? L.picks[f.id].name : f.name);
+  for (const f of gains()) for (const n of featOf(f)?.choice?.fixed || []) picked.push({ spell: D.spells.find(s => s.name === n), why: L.picks[f.id].name });
   for (const a of plan.always) picked.push({ spell: a.spell, why: `always prepared (${a.why})` });
   const seen = new Set(), lines = placeSpells(picked.filter(p => p.spell && !seen.has(p.spell.name) && seen.add(p.spell.name)));
   for (const { spell: s, why, line } of lines) {
