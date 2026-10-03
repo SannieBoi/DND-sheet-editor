@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&amp;D Character Sheet Editor</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <h1>Character Sheet Editor</h1>
+  <label class="btn" for="file">Upload PDF</label>
+  <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+  <button id="addText" class="btn" disabled title="Then click anywhere on the sheet to type there">+ Add text</button>
+  <button id="download" class="btn primary" disabled>Download with changes</button>
+  <button id="levelUp" class="btn lvl" disabled title="Gain a level: Hit Points, new features and spells, step by step">&#x2B06; Level up</button>
+  <div id="modeSwitch" class="seg" role="radiogroup" aria-label="Sheet mode" title="Killing Marble adds a Becoming Marble page after the sheet">
+    <button role="radio" data-mode="default" aria-checked="true" class="on" disabled>Default</button>
+    <button role="radio" data-mode="marble" aria-checked="false" disabled>Killing Marble</button>
+  </div>
+  <span id="status">Choose or drop a character sheet PDF to begin.</span>
+</header>
+
+<aside id="zoombox" aria-label="Zoom">
+  <button id="zoomIn" title="Zoom in (Ctrl + wheel)" aria-label="Zoom in">+</button>
+  <input id="zoom" type="range" min="50" max="200" step="5" value="100" aria-label="Zoom">
+  <button id="zoomOut" title="Zoom out (Ctrl + wheel)" aria-label="Zoom out">−</button>
+  <button id="zoomPct" title="Back to 100%">100%</button>
+</aside>
+
+<!-- Conditions and other debuffs (filled in by effects.js) -->
+<aside id="effects" aria-label="Effects"></aside>
+
+<main id="pages"><div id="drop">Drop your character sheet PDF here</div></main>
+
+<!-- Dice roller (filled in by roller.js) -->
+<aside id="roller" aria-label="Dice roller">
+  <button id="rollerTab" title="Show or hide the dice roller" aria-controls="roller"><span>Roll</span></button>
+  <nav id="rollActions">
+    <button data-tab="attack"><svg viewBox="0 0 24 24"><path d="M20 3.5 9.5 14M6.5 11l6.5 6.5M8.5 15.5 4 20M20 3.5v4l-8 8M20 3.5h-4l-8 8"/></svg>Attack</button>
+    <button data-tab="spell"><svg viewBox="0 0 24 24"><path d="M11 3l1.8 6.2L19 11l-6.2 1.8L11 19l-1.8-6.2L3 11l6.2-1.8zM18.5 15.5l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7z"/></svg>Spell</button>
+    <button data-tab="check"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>Check</button>
+    <button data-tab="save"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.5 7.5-8 9-4.5-1.5-8-4.5-8-9V6z"/></svg>Save</button>
+    <button data-tab="init"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h8l-1 8 9-12h-8z"/></svg>Initiative</button>
+    <button data-tab="dice"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zM12 7l5 8H7z"/></svg>Dice</button>
+  </nav>
+  <section id="rollPick"></section>
+  <div id="logHead"><span>Rolls</span><button id="clearLog">Clear</button></div>
+  <ol id="rollLog"><li class="empty">Your rolls show up here. Roll as often as you like.</li></ol>
+</aside>
+
+<!-- All libraries are local files, so this works offline straight from your disk -->
+<script src="pdf.min.js"></script>
+<script src="pdf.worker.min.js"></script>
+<script src="pdf-lib.min.js"></script>
+<!-- D&D 2024 rules data: each file adds to window.DND -->
+<script src="rules.js"></script>
+<script src="weapons.js"></script>
+<script src="armor.js"></script>
+<script src="classes.js"></script>
+<script src="feats.js"></script>
+<script src="species.js"></script>
+<script src="backgrounds.js"></script>
+<script src="spells.js"></script>
+<script src="sheets.js"></script>
+<script src="script.js"></script>
+<script src="dialog.js"></script>
+<script src="effects.js"></script>
+<script src="marble-body.js"></script>
+<script src="marble.js"></script>
+<script src="roller.js"></script>
+<script src="levelup.js"></script>
+</body>
+</html>
