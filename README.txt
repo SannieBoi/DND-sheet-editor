@@ -1,0 +1,126 @@
+D&D CHARACTER SHEET EDITOR
+==============================
+Short tutorial information:
+
+To begin, just run the index.html file.
+Load a character sheet (.pdf) to view it and make changes. Note that you will need to save your changes using the "Download with changes" button at the top
+
+If the tool cannot read your stats, try spelling it differently.
+
+Attack rolls, spells, checks, saves, initiative, and dice rolls can be used from the Roll tab on the right.
+
+Effects and concentrations can be added from the effects tab at the bottom left.
+==============================
+Short Killing Marble information:
+
+The Killing Marble tab is a mechanic for my own campaign, so not much detail will be given on how to use it.
+==============================
+
+
+FULL GUIDE
+==============================
+
+1. GETTING STARTED
+------------------------------
+- Open index.html in your browser (double-click it). No install and no internet needed; everything runs on your computer.
+- Click "Upload PDF" or drop a PDF onto the page.
+- The sheet must be a fillable PDF (one with boxes you can type in). Two kinds work:
+  - The official D&D 2024 character sheet from Wizards of the Coast. The tool recognises it and the status line at the
+    top says so.
+  - Other fillable sheets whose boxes have sensible names (e.g. "STR", "ClassLevel", "Wpn Name").
+- Nothing is saved until you press "Download with changes". That gives you a new copy of the PDF with your edits.
+  Open that copy next time to carry on where you left off.
+
+2. EDITING THE SHEET
+------------------------------
+- Click any box on the sheet and type.
+- Suggestions: typing in a weapon, spell, class, species or background box shows a list. Picking a weapon fills in its
+  attack bonus and damage. On the official sheet, picking a spell also fills in its level, casting time, range and the
+  Concentration / Ritual / Material boxes.
+- Boxes follow each other. Change a score and its modifier, skills, saves, initiative, passive Perception, spell attack and
+  save DC, AC, max HP and attack lines move with it. Change your level and the proficiency bonus (and everything you're
+  proficient in) follows. Boxes move by the change, so expertise, magic items and other extras you added are kept.
+- Proficiency: tick the box in front of a skill or save and it gains your proficiency bonus.
+- Numbers on the sheet win. If a box already holds a number (for example a +1 weapon), the roller uses it.
+- "+ Add text", then click anywhere on the sheet to write a note there.
+- Zoom with the slider on the right, or Ctrl + mouse wheel. Click the % button to go back to 100%.
+
+3. LEVEL UP (gold button in the header)
+------------------------------
+It asks if you're sure, then opens a window you can drag around by its title bar, so you can still see the sheet.
+1. Class: level up a class you have, or pick a new one (multiclassing). If you don't meet the 13+ requirement it warns
+   you but still lets you (your DM may allow it).
+2. Hit Points: the fixed value for your Hit Die is picked; press Roll to roll instead (as often as you like). Your
+   Constitution modifier is added, and Dwarven Toughness / Draconic Resilience too. You also gain a Hit Die.
+3. Features: every new feature with a short description, and any choices it needs: subclass, Ability Score Improvement
+   or a feat, Fighting Style, skills, Expertise, Weapon Mastery, Eldritch Invocations, Metamagic, and so on.
+4. Spells (spellcasters only): new cantrips and prepared spells (Wizards: spellbook spells too), an optional swap of one
+   cantrip and one spell, always-prepared spells, and the new spell slots.
+5. Review: every change with a tick box. Untick anything you don't want. Nothing touches the sheet until you press
+   "Apply to sheet"; Cancel throws it all away. After applying, the window stays open as a list of what changed until you
+   close it. Choices you skipped are listed under "Still to choose".
+
+4. ROLLING (the Roll tab on the right)
+------------------------------
+Click "Roll" on the right edge to open or close the panel. Pick a tab, pick what to roll, then Roll, Advantage or
+Disadvantage. There's no limit: roll as often as you like.
+- Attack: your weapon lines and attack spells. Rolls the attack, then damage (crits double the dice). Includes things
+  like Rage, Sneak Attack, Great Weapon Fighting, smites and Hunter's Mark.
+- Spell: your spells as cards with their text. Cast at any slot level you have (upcasting adds dice); healing spells add
+  your bonuses (e.g. Life Domain's Disciple of Life).
+- Check: any ability or skill check.
+- Save: any saving throw.
+- Initiative.
+- Dice: any dice you like, e.g. 2d6+3 or 4d6kh3 (roll 4d6, keep the highest 3).
+Every roll goes into the log below with Again / Advantage / Disadvantage buttons. "Clear" empties the log.
+Times in the log are in 24-hour format.
+
+5. EFFECTS AND CONCENTRATION (bottom left)
+------------------------------
+The Effects tray lists everything that changes your rolls. The roller applies them for you.
+- "+ Add": a condition (Poisoned, Prone, Exhaustion 2 ...), your own buff or debuff (advantage, disadvantage, a bonus, a
+  penalty, a speed change, or just a reminder), or a spell you're concentrating on. × removes an effect.
+- Concentration shows first, with a gold ring. Casting a concentration spell from a spell card starts it (the log line has
+  an Undo).
+- The tool never blocks you and never ends concentration on its own; it asks first. You're asked when you:
+  - cast another concentration spell (switch, or keep the old one),
+  - add Incapacitated, Paralyzed, Petrified, Stunned or Unconscious,
+  - turn Rage on,
+  - lower your Current or Temp HP on the sheet: it offers the Constitution save (DC 10 or half the damage). You can
+    correct the damage first. If the save fails, it asks whether to end concentration.
+  - drop to 0 HP.
+- Effects and concentration are saved inside the downloaded PDF.
+
+6. KILLING MARBLE
+------------------------------
+Switch the header from "Default" to "Killing Marble" to add the Becoming Marble page after the sheet. Set each body
+part's marble score there; its penalties show in the Effects tray and the roller applies them. After a CON save, parts
+that are spreading show whether they resisted, and a failed one offers "Apply?". "Clear all marble" (click twice) resets
+the scores. The page is part of every download while the switch is on.
+
+7. TIPS
+------------------------------
+- If a stat isn't picked up, check the box's spelling (e.g. "Longsword +1" works, "L.sword" doesn't).
+- If something looks old after an update, reload the page (F5).
+- The Google font loads from the internet when you're online; offline the page uses a fallback font and works the same.
+
+8. NOT INCLUDED YET
+------------------------------
+- Spells, feats and subclasses that are only in the Player's Handbook (e.g. Toll the Dead, Great Weapon Master,
+  Sharpshooter, subclasses beyond the one per class in the free rules). Level up lets you add their features yourself.
+- Monsters, equipment other than weapons and armor, Warlock invocation effects in the roller (except Agonizing Blast),
+  Bard instrument choices.
+
+
+CREDITS AND LICENCES
+==============================
+D&D Character Sheet Editor, including Killing Marble and its "Becoming Marble" rules, is by SannieBoi, MIT License (see
+LICENSE): use it, change it, share it, but keep the copyright notice and licence text in every copy.
+This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available
+at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License,
+available at https://creativecommons.org/licenses/by/4.0/legalcode.
+This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at
+https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License,
+available at https://creativecommons.org/licenses/by/4.0/legalcode.
+CREDITS.md lists what was changed, the official character sheet in tests/ (Fan Content Policy notice), the Killing Marble
+material and the libraries (PDF.js, pdf-lib); their licence texts are in licenses/.

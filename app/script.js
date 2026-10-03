@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 // The worker script is loaded by a <script> tag in index.html, so pdf.js runs fine from file://
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
 const { PDFDocument, StandardFonts, rgb } = PDFLib;
 const $ = id => document.getElementById(id);
 const SCALE = 1.5;

@@ -1,7 +1,8 @@
 # D&D Sheet Viewer — project notes for Claude
 
 Keep this file current: update it at the end of any change that adds files, globals, events, rules decisions or open items.
-`readme.txt` is the user-facing doc; this file is for working on the code.
+`README.txt` is the user's guide (its top "Short tutorial" and "Short Killing Marble" parts were written by the user: keep
+them as they are; the user wants Killing Marble kept brief there). This file is for working on the code.
 
 Git: github.com/SannieBoi/DND-sheet-editor, branch `main`. `.gitignore` leaves out tests/_out and __pycache__.
 
@@ -12,18 +13,21 @@ Plain `<script>` tags only (no modules/fetch: file:// blocks them). Every script
 `window.*` globals and DOM events.
 
 ## Files (load order in index.html)
+Folders (user's wish): `lib/` libraries, `data/` rules data + sheet maps, `app/` the tool's own scripts, `marble/` Killing
+Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root. Paths below are inside those folders.
+`app/script.js` sets pdf.js `workerSrc = 'lib/pdf.worker.min.js'` (the worker also loads as a script tag, so pdf.js uses a fake worker).
 | File | Role |
 |---|---|
-| pdf.min.js, pdf.worker.min.js (pdf.js 3.11.174), pdf-lib.min.js | render PDF / write PDF. Never edit. |
-| rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see readme.txt and "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
-| sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
-| script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
-| dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). |
-| effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
-| marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
-| marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
-| roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice tabs, log, animations. |
-| levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. See "Level up" below. |
+| lib/pdf.min.js, lib/pdf.worker.min.js (pdf.js 3.11.174), lib/pdf-lib.min.js | render PDF / write PDF. Never edit. |
+| data/ rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
+| data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
+| app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
+| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). |
+| app/effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
+| marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
+| marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
+| app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice tabs, log, animations. |
+| app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. See "Level up" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
@@ -87,8 +91,20 @@ Plain `<script>` tags only (no modules/fetch: file:// blocks them). Every script
 - Source contradictions (decided): the D&D Beyond spell headers wrongly add classes to 9 spells (e.g. Tiny Hut "Cleric",
   Mind Spike "Evocation cantrip"); the class tables back our tags, so spells.js classes stay. The Wizard class table omits
   spells whose own description says Wizard (Chromatic Orb...); we keep Wizard on them.
-- Attribution: Wizards asks for the exact SRD statement and no other credit to them; keep it in CREDITS.md / readme.txt
+- Attribution: Wizards asks for the exact SRD statement and no other credit to them; keep it in CREDITS.md / README.txt
   only (file headers say "see CREDITS.md"). New third-party files or data go into CREDITS.md.
+- What each data file holds: weapons.js DND.weapons (38), weaponProperties, masteryProperties, ammunition, attackItems, coins;
+  armor.js DND.armor (12), shield, armorRules; classes.js DND.classes.{barbarian..wizard} (hit die, saves, proficiencies,
+  weaponMastery, levels[0..19], attackFeatures, subclass); feats.js DND.feats (17); species.js DND.species (9, lineages,
+  attackNotes); backgrounds.js DND.backgrounds (4); rules.js abilities, skills, PB by level, damage types, attack/damage
+  formulas, unarmed strike, cantrip scaling; spells.js DND.spells (roll data keys documented in its header comment).
+  Example: `DND.classes.fighter.levels[4]` = level 5 (`attacks === 2`, `weaponMastery === 4`).
+- Weapons/armor were transcribed from the D&D Beyond Basic Rules Equipment chapter. The SRD JSON data we compared it with
+  disagreed on 11 values (Trident damage, Mace/Pike weight, Longbow and Hand Crossbow cost ...); D&D Beyond won every time.
+  That SRD data also listed Longswords for Rogues (not 2024) - fixed.
+- Spell roll data fixes vs the source: Conjure Animals is a DEX save, Weird has no half damage, "Thunderwavea" typo.
+  Spells without damage/healing only carry their attack type / save. A few feature summaries (Hamstring Blow -15 ft, Horde
+  Breaker, Divine Smite upcasting, Obscure cost, Trip/Withdraw) come from knowledge of the 2024 rules (source text cut off).
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. Nothing from the full PHB.
 
 ## Rules decisions (keep consistent)
