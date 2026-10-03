@@ -3,7 +3,7 @@
    abilityIncrease: { amount, choose: [abilities] (pick one; 'any' = any ability), max } - Ability Score Improvement instead
    offers { options: [[2], [1, 1]], max: 20 } (+2 to one score or +1 to two).   choice: what the player picks (as in classes.js).
    aliases: other spellings to recognise on a sheet.
-   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, Wizards of the Coast). Numbers and names come from the
+   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, see CREDITS.md). Numbers and names come from the
    rules data; feature text is condensed into short plain-language summaries (not the book text). */
 window.DND = window.DND || {};
 

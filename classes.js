@@ -14,7 +14,7 @@
    subclass: { name, features, attackFeatures, spells: { classLevel: [always-prepared spells] } (Druid: by land type) }
    warlock.invocations / sorcerer.metamagic / sorcerer.fontOfMagic ([slot level, point cost, min Sorcerer level]) /
    druid.wildShapeForms ([Druid level, known forms, max CR, fly]) / wizard.spellbook ({ start, perLevel }).
-   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, Wizards of the Coast). Numbers and names come from the
+   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, see CREDITS.md). Numbers and names come from the
    rules data; feature text is condensed into short plain-language summaries (not the book text). */
 window.DND = window.DND || {};
 

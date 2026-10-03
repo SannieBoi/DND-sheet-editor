@@ -2,7 +2,7 @@
    attackNotes = condensed summaries of traits that matter for attack or damage rolls. traitLevels = traits that start at a
    character level above 1. features[] = every trait as { lvl, name, text, choice?, grants? } (same shapes as classes.js;
    grants.hpPerLevel = +HP per character level, choice.type 'lineage' = pick one of subspecies).
-   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, Wizards of the Coast). Numbers and names come from the
+   Source: D&D Beyond Basic Rules (2024) / SRD 5.2.1 (CC-BY-4.0, see CREDITS.md). Numbers and names come from the
    rules data; feature text is condensed into short plain-language summaries (not the book text). */
 window.DND = window.DND || {};
 

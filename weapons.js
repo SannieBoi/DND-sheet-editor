@@ -1,6 +1,6 @@
 /* D&D 2024 Basic Rules — weapons, weapon properties, mastery properties, attack-related gear.
    Compiled from the D&D Beyond Basic Rules (2024) Equipment chapter; descriptions are condensed paraphrases,
-   numbers/names are as listed. Game content (c) Wizards of the Coast.
+   numbers/names are as listed. Credits: see CREDITS.md.
    Weapon fields: category, kind, dice (damage), dmg (damage type), props, mastery, lb (weight), gp (cost in gold)
    Optional: thrown [normal,long], range [normal,long] + ammo, versatile (two-handed damage), note */
 window.DND = window.DND || {};

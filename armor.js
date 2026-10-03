@@ -1,4 +1,4 @@
-/* D&D 2024 Basic Rules — armor and shield (Equipment chapter). Condensed; game content (c) Wizards of the Coast.
+/* D&D 2024 Basic Rules — armor and shield (Equipment chapter). Condensed; see CREDITS.md.
    Fields: category, ac (base AC), dex ('full' = add Dex mod, 'max2' = add Dex mod up to +2, 'none'), minStr (speed -10 ft if lower),
    stealthDisadv, lb, gp */
 window.DND = window.DND || {};

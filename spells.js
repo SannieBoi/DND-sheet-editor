@@ -1,4 +1,4 @@
-/* D&D 2024 rules - spells from the System Reference Document 5.2 (CC-BY-4.0, Wizards of the Coast LLC).
+/* D&D 2024 rules - spells from the System Reference Document 5.2 (CC-BY-4.0, see CREDITS.md).
    name, aliases (the Basic Rules name, e.g. Tasha's Hideous Laughter), level (0 = cantrip), school, classes, time, range, components, duration, ritual, conc (concentration), text (SRD text).
    Roll data (hand-checked against the text): atk ('melee'/'ranged' spell attack), save (ability), half (half damage on a
    successful save), dmg [[dice, type], ...] rolled together, mod (add your spellcasting modifier to the first damage),

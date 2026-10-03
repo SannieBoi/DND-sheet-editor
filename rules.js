@@ -1,4 +1,4 @@
-/* D&D 2024 Basic Rules - general numbers and formulas for attack/damage rolls (condensed; (c) Wizards of the Coast).
+/* D&D 2024 Basic Rules - general numbers and formulas for attack/damage rolls (condensed; see CREDITS.md).
    Skills come from the SRD 5.2.1 data (CC-BY-4.0). Formulas are written in plain language for use in code. */
 window.DND = window.DND || {};
 

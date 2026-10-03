@@ -3,6 +3,8 @@
 Keep this file current: update it at the end of any change that adds files, globals, events, rules decisions or open items.
 `readme.txt` is the user-facing doc; this file is for working on the code.
 
+Git: github.com/SannieBoi/DND-sheet-editor, branch `main`. `.gitignore` leaves out tests/_out and __pycache__.
+
 ## What it is
 An offline character-sheet tool: open `index.html` straight from disk (file://, no server, no build, no npm). Load a
 fillable D&D 2024 character sheet PDF, edit its fields, roll dice from it, download the edited PDF.
@@ -23,6 +25,7 @@ Plain `<script>` tags only (no modules/fetch: file:// blocks them). Every script
 | roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice tabs, log, animations. |
 | levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. See "Level up" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
+| CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
 | tests/ | `python tests/run.py [name]` — headless Edge tests (209 checks). See Testing. |
 
 ## Globals and events
@@ -83,6 +86,8 @@ Plain `<script>` tags only (no modules/fetch: file:// blocks them). Every script
 - Source contradictions (decided): the D&D Beyond spell headers wrongly add classes to 9 spells (e.g. Tiny Hut "Cleric",
   Mind Spike "Evocation cantrip"); the class tables back our tags, so spells.js classes stay. The Wizard class table omits
   spells whose own description says Wizard (Chromatic Orb...); we keep Wizard on them.
+- Attribution: Wizards asks for the exact SRD statement and no other credit to them; keep it in CREDITS.md / readme.txt
+  only (file headers say "see CREDITS.md"). New third-party files or data go into CREDITS.md.
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. Nothing from the full PHB.
 
 ## Rules decisions (keep consistent)
