@@ -1,5 +1,11 @@
 # Credits and licenses
 
+## This project
+
+D&D Character Sheet Editor, including the Killing Marble mode and its “Becoming Marble” rules, is by SannieBoi and released under the MIT License ([LICENSE](LICENSE)). You may use, change and share it. Every copy or changed version must keep the copyright notice and the license text.
+
+Parts made by others keep their own licenses. They are listed below.
+
 ## D&D rules content (SRD, CC-BY-4.0)
 
 This work includes material from the System Reference Document 5.2.1 (“SRD 5.2.1”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
@@ -19,7 +25,7 @@ D&D Character Sheet Editor is unofficial Fan Content permitted under the [Fan Co
 
 ## Killing Marble
 
-The Killing Marble mode follows the homebrew document “Becoming Marble”. The body outline in `marble-body.js` comes from that document.
+The Killing Marble mode follows “Becoming Marble”, SannieBoi’s own homebrew rules. The body outline in `marble-body.js` comes from that document.
 
 ## Libraries
 
