@@ -123,6 +123,34 @@ function applySpread(id) {
   changed();
 }
 
+// ---- An hour passes: every marbled part (not lost, not full) gains 1 ----------------------------------------
+// Shown first with what each part reaches; then, if a part is spreading and has an unmarbled neighbour, the CON save
+// against the spread can be rolled right away (its verdicts and "Apply?" work as for any CON save). One step for Undo.
+async function hourPasses() {
+  const m = marble(), grow = Object.keys(PARTS).filter(id => m[id] > 0 && m[id] < PARTS[id].max && !m.lost[id]);
+  const after = id => m[id] + (grow.includes(id) ? 1 : 0);
+  const spreadAfter = Object.keys(PARTS).filter(id => !m.lost[id] && after(id) >= SPREAD_AT && targets(id).length);
+  if (!grow.length) {
+    return window.ask({ title: 'An hour passes', text: 'No part has marble that can grow (parts at 0, full or lost stay as they are), so nothing changes.' });
+  }
+  // the rules a card reaches this hour, e.g. "Right arm 5: −2 to hit and damage with this arm"
+  const reached = CARDS.flatMap(card => {
+    const was = cardScore(card), now = card.parts.reduce((t, id) => t + after(id), 0);
+    return card.rules.filter(([at]) => at > was && at <= now).map(([at, text]) => `${card.title || PARTS[card.parts[0]].name} ${at}: ${text}`);
+  });
+  const body = h('div', { class: 'ask-body mp-hour' },
+    h('ul', {}, grow.map(id => h('li', {}, h('b', {}, PARTS[id].name), ` ${m[id]} → ${m[id] + 1}`, h('small', {}, ` / ${PARTS[id].max}`)))),
+    reached.length ? h('p', { class: 'mp-reach' }, 'Now: ' + reached.join('; ') + '.') : null,
+    h('p', {}, spreadAfter.length ? `Then spreading: ${spreadAfter.map(id => `${PARTS[id].name} (DC ${6 + after(id)})`).join(', ')}. ` +
+      'A CON save keeps it from spreading to the parts next to it that have no marble yet.' : 'Nothing is spreading into an unmarbled part, so no CON save is needed.'));
+  const a = await window.ask({ title: 'An hour passes', text: 'Every part that has marble gains 1:', body,
+    buttons: [{ label: 'Cancel', value: null }, { label: 'Apply', value: 'apply', primary: !spreadAfter.length },
+      spreadAfter.length ? { label: 'Apply and roll CON save', value: 'roll', primary: true } : null].filter(Boolean) });
+  if (!a) return;
+  window.sheet.transaction('An hour passes (Killing Marble)', () => { for (const id of grow) setScore(id, m[id] + 1); });
+  if (a === 'roll') window.roller?.save('CON', 'Marble spread: CON save');
+}
+
 // Spells can clear it all; lost parts stay lost
 function clearAll() {
   for (const id in PARTS) marble()[id] = 0;
@@ -158,6 +186,7 @@ function buildPage() {
     h('div', { class: 'mp-rules' }, h('b', {}, 'Spreading & breaking'), RULES_TEXT.map(t => h('p', {}, t)),
       h('p', { class: 'mp-spreading' }),
       h('div', { class: 'mp-actions' },
+        h('button', { class: 'mp-hour', title: 'Every marbled part gains 1, then a CON save if it spreads. You see it before it happens.', onclick: hourPasses }, 'An hour passes'),
         h('button', { class: 'mp-save', onclick: () => window.roller?.save('CON', 'Marble spread: CON save') }, 'Roll CON save'),
         h('button', { class: 'mp-clear', onclick: confirmClear }, 'Clear all marble'))),
     h('div', { class: 'mp-stamp', 'aria-hidden': 'true' }, 'Story finished'));
@@ -307,6 +336,7 @@ document.addEventListener('sheet-loaded', () => {
   syncSwitch();
   buildPage();
 });
+document.addEventListener('sheet-state-change', () => { syncSwitch(); buildPage(); }); // Undo / Redo put sheetState back
 
 // ---- The page in the downloaded PDF --------------------------------------------------
 const pdfText = s => String(s).replace(/−/g, '-').replace(/→/g, '->').replace(/[^\x20-\x7E\xA0-\xFF]/g, '');
@@ -381,5 +411,5 @@ window.pdfHooks.push(async (doc, { StandardFonts, rgb }) => {
 });
 
 window.effects.register(marbleEffects);
-window.marble = { parts: PARTS, setScore: (id, v) => setScore(id, v), setMode, applySpread, clearAll };
+window.marble = { parts: PARTS, setScore: (id, v) => setScore(id, v), setMode, applySpread, clearAll, hourPasses };
 })();

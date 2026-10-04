@@ -15,6 +15,7 @@ const num = el => +el.dataset.count;
 let forced = [];
 const realGRV = crypto.getRandomValues.bind(crypto);
 crypto.getRandomValues = a => { if (forced.length) { a[0] = forced.shift() - 1; return a; } return realGRV(a); };
+const castAnyway = async () => { await wait(20); const b = btn('Cast anyway', document.querySelector('.ask') || document.body); if (b) b.click(); else log('FAIL no "Cast anyway" question'); await wait(20); };
 
 (async () => { try {
   const doc = await PDFLib.PDFDocument.create(), page = doc.addPage([612, 792]), form = doc.getForm();
@@ -116,12 +117,16 @@ crypto.getRandomValues = a => { if (forced.length) { a[0] = forced.shift() - 1; 
   ok(groups.join(',') === 'Cantrips,Level 1,Level 2,Level 3' || groups.length >= 2, 'spell groups: ' + groups.join(', '));
   [...pick().querySelectorAll('.item')].find(b => b.textContent.startsWith('Magic Missile')).click();
   [...pick().querySelectorAll('.slotbtn')].find(b => b.textContent === '3').click();
-  btn('Cast', pick()).click();
+  btn('Cast', pick()).click(); await wait(20);
+  // a Fighter has no spell slots: casting asks first
+  ok(/No level 3 spell slots/.test(document.querySelector('.ask')?.textContent || ''), 'no slots: asks "Cast anyway?"');
+  await castAnyway();
   e = last();
+  ok(/No level 3 slot left: cast anyway/.test(e.querySelector('.slot-line')?.textContent || ''), 'the log says it was cast without a slot');
   ok(e.querySelectorAll('.line').length === 5 && e.querySelector('.grand').textContent.startsWith('Total:'), 'Magic Missile at slot 3: 5 darts, total');
   btn('‹ Spells', pick()).click();
   [...pick().querySelectorAll('.item')].find(b => b.textContent.startsWith('Fireball')).click();
-  btn('Cast & roll', pick()).click();
+  btn('Cast & roll', pick()).click(); await castAnyway();
   e = last();
   ok(e.querySelector('.dc').textContent.includes('DC 14') && e.querySelectorAll('.die.d6').length === 8 && e.querySelector('.half'), 'Fireball: DC 14 DEX, 8d6, half shown');
   btn('‹ Spells', pick()).click();
@@ -136,7 +141,7 @@ crypto.getRandomValues = a => { if (forced.length) { a[0] = forced.shift() - 1; 
   btn('‹ Spells', pick()).click();
   { const q = pick().querySelector('.search'); q.value = ''; q.dispatchEvent(new Event('input')); }
   [...pick().querySelectorAll('.item')].find(b => b.textContent.startsWith('Cure Wounds')).click();
-  btn('Roll healing', pick()).click();
+  btn('Roll healing', pick()).click(); await castAnyway();
   ok(last().querySelector('.dmg.heal'), 'Cure Wounds heal roll');
   btn('‹ Spells', pick()).click();
 
@@ -157,6 +162,39 @@ crypto.getRandomValues = a => { if (forced.length) { a[0] = forced.shift() - 1; 
   ok(num(e.querySelector('.dsum .total')) === 6 + 4 + 3 + 2 && e.querySelectorAll('.die.dropped').length === 1, '4d6kh3+2 with 6,1,4,3 = 15, one dropped');
   btn('d20', pick())?.click() ?? pick().querySelector('.qd.d20, .qd')?.click();
   // uniformity of rnd: 20000 d20s via custom rolls is slow in DOM; check distribution through getRandomValues mapping instead
+  // ---- Weapon Mastery (a Fighter; no list of mastered weapons on the sheet, so every weapon counts)
+  tab('attack'); btn('‹ Weapons', pick())?.click();
+  [...pick().querySelectorAll('.item')][1].click(); // Greatsword: Graze
+  ok(btn('Mastery: Graze', pick())?.classList.contains('on'), 'Greatsword: the "Mastery: Graze" switch is on');
+  forced = [1]; btn('Attack', pick()).click();
+  ok(/Graze: the attack missed, but the target still takes 3 slashing damage/.test(last().querySelector('.mastery-line')?.textContent || ''), 'Graze on a miss: 3 slashing (STR +3)');
+  btn('‹ Weapons', pick()).click();
+  const other = w => { const sel = pick().querySelector('select'); sel.value = 'w:' + w; sel.dispatchEvent(new Event('change')); };
+  other('Rapier');
+  forced = [15, 4]; btn('Attack', pick()).click();
+  ok(/Vex: on a hit that deals damage/.test(last().textContent) && btn('It hit: Advantage next', last()), 'Rapier: a Vex line with a button');
+  btn('It hit: Advantage next', last()).click();
+  ok(/Vex: your next attack roll has Advantage \(from your Rapier hit\)/.test(pick().textContent), 'the card says the next attack has Advantage');
+  forced = [3, 18, 5]; btn('Attack', pick()).click();
+  ok(last().querySelectorAll('.face').length === 2 && /Advantage \(Vex\)/.test(last().querySelector('.tag').textContent), 'the next attack rolls with Advantage (Vex): ' + last().querySelector('.tag').textContent);
+  ok(!/Vex: your next/.test(pick().textContent), 'Vex is used up');
+  btn('‹ Weapons', pick()).click();
+  other('Greataxe');
+  forced = [12, 6]; btn('Attack', pick()).click();
+  forced = [11, 7]; btn('Cleave: attack a 2nd creature', last()).click();
+  ok(last().querySelector('.rhead b').textContent === 'Greataxe (Cleave)' && num(last().querySelector('.dsum .total')) === 7 && !btn('Cleave', last()),
+    'Cleave: a second attack, damage 7 without the +3 STR: ' + num(last().querySelector('.dsum .total')));
+  btn('Mastery: Cleave', pick()).click(); forced = [12, 6]; btn('Attack', pick()).click();
+  ok(!last().querySelector('.mastery-line') && /switched off/.test(pick().textContent), 'mastery switched off: no line in the log');
+  btn('‹ Weapons', pick()).click();
+  type('Features and Traits', 'Fighting Style: Great Weapon Fighting\nSavage Attacker\nWeapon Mastery (Fighter 1): Longsword, Greatsword, Battleaxe');
+  other('Rapier');
+  ok(!btn('Mastery: Vex', pick())?.classList.contains('on'), 'with a list of mastered weapons on the sheet, the Rapier (not on it) starts off');
+  btn('‹ Weapons', pick()).click();
+  [...pick().querySelectorAll('.item')][1].click();
+  ok(btn('Mastery: Graze', pick())?.classList.contains('on'), 'the Greatsword (on the list) starts on');
+  btn('‹ Weapons', pick()).click();
+
   const counts = Array(20).fill(0); for (let i = 0; i < 20000; i++) counts[crypto.getRandomValues(new Uint32Array(1))[0] % 20]++;
   ok(Math.min(...counts) > 850 && Math.max(...counts) < 1150, 'd20 faces roughly uniform: ' + Math.min(...counts) + '-' + Math.max(...counts));
   log('log entries:', entries().length);

@@ -23,6 +23,7 @@ const FIELD_MAP = {
   ac: ['AC', 'Armor Class'], initiative: ['Initiative'], speed: ['Speed'],
   profBonus: ['ProfBonus', 'Proficiency Bonus'], passivePerception: ['Passive', 'Passive Perception'],
   inspiration: ['Inspiration'], hitDice: ['HD', 'Hit Dice'], hitDiceTotal: ['HDTotal', 'Hit Dice Total', 'Total Hit Dice'],
+  hitDiceSpent: ['HDSpent', 'Hit Dice Spent', 'Spent Hit Dice'],
   level: ['Level', 'Character Level'], subclass: ['Subclass'],
   spellAbility: ['SpellcastingAbility', 'SpellcastingAbility 2', 'Spellcasting Ability'],
   spellDC: ['SpellSaveDC', 'SpellSaveDC 2', 'Spell Save DC'], spellAttack: ['SpellAtkBonus', 'SpellAtkBonus 2', 'Spell Attack Bonus'],
@@ -30,8 +31,12 @@ const FIELD_MAP = {
   equipment: ['Equipment'], attacksText: ['AttacksSpellcasting', 'Attacks & Spellcasting'],
   cp: ['CP'], sp: ['SP'], ep: ['EP'], gp: ['GP'], pp: ['PP']
 };
-// Spell slot totals per level: "SlotsTotal 19" is level 1 on the classic fillable sheet
-for (let l = 1; l <= 9; l++) FIELD_MAP['slots' + l] = ['SlotsTotal ' + (18 + l), 'Slots ' + l, 'Spell Slots ' + l, `Level ${l} Slots`];
+// Spell slot totals per level: "SlotsTotal 19" is level 1 on the classic fillable sheet. The box printed "Slots Expended"
+// next to it is named "SlotsRemaining 19" there; it holds the slots used.
+for (let l = 1; l <= 9; l++) {
+  FIELD_MAP['slots' + l] = ['SlotsTotal ' + (18 + l), 'Slots ' + l, 'Spell Slots ' + l, `Level ${l} Slots`];
+  FIELD_MAP['slotsExpended' + l] = ['SlotsRemaining ' + (18 + l), 'Slots Expended ' + l, 'Spell Slots Expended ' + l, `Level ${l} Expended`, 'Slots Used ' + l];
+}
 const TEXT_KEYS = new Set(['name', 'classLevel', 'race', 'background', 'alignment', 'hitDice', 'hitDiceTotal', 'spellAbility',
   'features', 'proficiencies', 'equipment', 'attacksText', 'subclass', 'size', 'features2', 'speciesTraits', 'featsText',
   'weaponProficiencies', 'toolProficiencies', 'appearance', 'backstory', 'languages']);
@@ -94,7 +99,8 @@ function refreshCharacter() {
   return stats;
 }
 
-// Change a field from code (a checkbox takes true/false). The field's own listener records the edit, so it ends up in the download.
+// Change a field from code (a checkbox takes true/false). The field's own listener records the edit (for the download
+// and for Undo).
 function writeField(name, value) {
   const list = els[name];
   if (!list) return false;
@@ -266,6 +272,21 @@ function critRange() {
   const f = character.classes.find(x => x.key === 'fighter');
   if (!f || !/champion/i.test(`${character.classLevel ?? ''} ${character.subclass ?? ''}`)) return 20;
   return f.level >= 15 ? 18 : f.level >= 3 ? 19 : 20;
+}
+
+// Spell slots per level (index 0 = level 1) of a set of classes [{ key, level }]: one class uses its own table, two or more
+// casters add up their caster levels (half casters round up); Warlock Pact Magic slots are added on top at their level.
+function slotsFor(classes) {
+  const casters = classes.filter(c => D.classes[c.key].spellcasting && D.classes[c.key].spellcasting.type !== 'pact');
+  let slots = Array(9).fill(0);
+  if (casters.length === 1) slots = [...D.classes[casters[0].key].levels[casters[0].level - 1].spells.slots];
+  else if (casters.length > 1) {
+    const cl = casters.reduce((t, c) => t + (D.classes[c.key].spellcasting.type === 'half' ? Math.ceil(c.level / 2) : c.level), 0);
+    slots = [...D.rules.multiclass.slotsByCasterLevel[Math.min(20, cl) - 1]];
+  }
+  const w = classes.find(c => D.classes[c.key].spellcasting?.type === 'pact'), pact = w && D.classes[w.key].levels[w.level - 1].spells.pact;
+  if (pact) slots[pact.slotLevel - 1] += pact.slots;
+  return slots;
 }
 
 function findSpells(allText) {
@@ -619,12 +640,153 @@ let extraPages = 0;
 const say = t => { $('status').textContent = t; };
 const clean = s => s.replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '?'); // Helvetica can only draw Latin-1
 
+// ---- Undo / redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) -------------------------------------
+// One step = one thing you did: typing in one box (until you leave it) or a click on a checkbox, together with every box
+// that followed it; or one action from code (level up, a rest, a spell slot: transaction()). A step holds each field's
+// value before and after, and window.sheetState before and after when that changed. Changes to sheetState made outside a
+// step (the effects tray, Killing Marble scores, concentration) become steps of their own, so the history stays in order:
+// undoing a rest never throws away an effect added after it.
+const history = { undo: [], redo: [] };
+let step = null, replaying = false, stateMark = '{}'; // sheetState as of the last step
+const fieldText = name => { const v = currentValue(name); return Array.isArray(v) ? v.join('\n') : v ?? ''; };
+const changedStep = s => s.state || [...s.changes.values()].some(c => c.before !== c.after);
+const stateJSON = () => JSON.stringify({ ...sheetState, extraPages: undefined }); // extraPages only matters to the download
+const STATE_LABELS = { marble: 'Killing Marble', mode: 'Sheet mode', effects: 'Effects', concentration: 'Concentration',
+  used: 'Class features', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice' };
+
+function newStep(s) {
+  history.undo.push(s);
+  if (history.undo.length > 200) history.undo.shift();
+  history.redo = [];
+  return s;
+}
+
+// A change to sheetState since the last step becomes its own step (named after what changed)
+function syncState() {
+  if (replaying || step?.tx) return;
+  const now = stateJSON();
+  if (now === stateMark) return;
+  const a = JSON.parse(stateMark), b = JSON.parse(now);
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+  closeStep();
+  newStep({ label: [...new Set(keys.map(k => STATE_LABELS[k] || k))].join(', '), changes: new Map(), state: { before: stateMark, after: now } });
+  stateMark = now;
+  undoButtons();
+}
+
+function record(name, before, after) {
+  if (replaying || before === after) return;
+  // your edit in another box starts a new step; boxes that follow it (written by code) join the step that is open
+  if (!step || !writing && !step.tx && step.field !== name) {
+    syncState();
+    closeStep();
+    step = newStep({ field: writing ? null : name, changes: new Map() });
+    if (writing) { const s = step; queueMicrotask(() => { if (step === s) closeStep(); }); } // a write from code: its own step
+  }
+  const c = step.changes.get(name);
+  if (c) c.after = after; else step.changes.set(name, { before, after });
+  undoButtons();
+}
+
+function closeStep() {
+  if (!step) return;
+  if (!changedStep(step) && history.undo.includes(step)) history.undo.splice(history.undo.indexOf(step), 1);
+  step = null;
+  undoButtons();
+}
+
+// Group everything fn writes (to the sheet and to sheetState) into one step called label
+function transaction(label, fn) {
+  if (step?.tx) return fn(); // already inside one
+  syncState();
+  closeStep();
+  const s = step = newStep({ tx: true, label, changes: new Map() }), before = stateJSON();
+  try { return fn(); } finally {
+    const after = stateJSON();
+    if (after !== before) s.state = { before, after };
+    stateMark = after;
+    if (step === s) closeStep();
+  }
+}
+
+// Put a step's values back (which = 'before' to undo, 'after' to redo). The boxes are set as they were, so nothing follows.
+function replay(s, which) {
+  replaying = true;
+  for (const [name, c] of s.changes) writeField(name, c[which]);
+  if (s.state) {
+    const st = JSON.parse(s.state[which]);
+    for (const k in sheetState) if (k !== 'extraPages') delete sheetState[k];
+    Object.assign(sheetState, st);
+    document.dispatchEvent(new CustomEvent('sheet-state-change'));
+    window.effects?.changed();
+    stateMark = stateJSON(); // after the redraws, which may fill in defaults
+  }
+  replaying = false;
+  snap = null;
+  refreshCharacter();
+  undoButtons();
+}
+
+// What a step is called: "Level up", "STR", "Stealth" (by its stat key), else the field's own name
+const KEY_LABELS = { hp: 'Current HP', hpMax: 'Max HP', hpTemp: 'Temp HP', classLevel: 'Class', ac: 'AC', profBonus: 'Proficiency Bonus',
+  passivePerception: 'Passive Perception', hitDice: 'Hit Dice', hitDiceSpent: 'Hit Dice spent', race: 'Species', name: 'Name' };
+function stepLabel(s) {
+  if (s.label) return s.label;
+  if (!s.field) return 'a change';
+  const key = Object.keys(fieldOf).find(k => fieldOf[k] === s.field);
+  if (!key) return s.field;
+  return KEY_LABELS[key] || (/^(str|dex|con|int|wis|cha)$/.test(key) ? key.toUpperCase() : key.replace(/^skill:/, '').replace(/^save:(\w+)/, '$1 save'));
+}
+const stepText = s => {
+  const more = s.changes.size - (s.field ? 1 : 0);
+  return stepLabel(s) + (s.field && more > 0 ? ` (and ${more} box${more > 1 ? 'es' : ''} that followed)` : '');
+};
+
+function undo() {
+  syncState();
+  closeStep();
+  const s = history.undo.pop();
+  if (!s) return say('Nothing to undo.');
+  replay(s, 'before');
+  history.redo.push(s);
+  say('Undone: ' + stepText(s) + '. Ctrl+Y brings it back.');
+}
+function redo() {
+  if (stateJSON() !== stateMark) return syncState(); // something changed since: that is the newest step now, nothing to redo
+  closeStep();
+  const s = history.redo.pop();
+  if (!s) return say('Nothing to redo.');
+  replay(s, 'after');
+  history.undo.push(s);
+  say('Redone: ' + stepText(s) + '.');
+}
+function undoButtons() {
+  const u = history.undo.findLast(changedStep), r = history.redo.at(-1);
+  $('undo').disabled = !u; $('redo').disabled = !r;
+  $('undo').title = u ? `Undo: ${stepLabel(u)} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
+  $('redo').title = r ? `Redo: ${stepLabel(r)} (Ctrl+Y)` : 'Redo (Ctrl+Y)';
+  markUnsaved();
+}
+
+// ---- Unsaved changes: the Download button shows a dot, and closing the tab asks first -------------------------
+let savedStamp = '';
+const sameValue = (a, b) => String(Array.isArray(a) ? a.join('\n') : a ?? '') === String(Array.isArray(b) ? b.join('\n') : b ?? '');
+const stamp = () => JSON.stringify([Object.entries(edits).filter(([n, e]) => !sameValue(e.value, raw[n])).map(([n, e]) => [n, e.value]),
+  notes.filter(n => n.text.trim()).map(n => [n.page, n.x, n.y, n.text]), { ...sheetState, extraPages: 0 }]);
+const unsaved = () => !!bytes && stamp() !== savedStamp;
+function markUnsaved() {
+  const u = unsaved();
+  $('download').classList.toggle('unsaved', u);
+  $('download').title = u ? 'You have changes that are not in a downloaded PDF yet' : '';
+}
+
 async function load(file) {
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return say('Please choose a PDF file.');
   fileName = file.name.replace(/\.pdf$/i, '');
   bytes = new Uint8Array(await file.arrayBuffer());
   edits = {}; notes = []; setAddMode(false);
   $('pages').innerHTML = ''; raw = {}; els = {}; meta = {}; profBoxes = {}; snap = null; weaponRows = []; closeSuggest();
+  history.undo = []; history.redo = []; step = null;
   say('Loading…');
   try {
     const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
@@ -649,6 +811,10 @@ async function load(file) {
     console.table(character);
     $('download').disabled = $('addText').disabled = false;
     document.dispatchEvent(new CustomEvent('sheet-loaded'));
+    history.undo = []; history.redo = []; step = null; // boxes filled in while opening are not something to undo
+    stateMark = stateJSON();
+    savedStamp = stamp();
+    undoButtons();
     say(fields ? `${sheetMap ? sheetMap.name.replace(/ \(.*/, '') + ': ' : ''}${fields} editable fields found, ${stats} stats and ${weaponRows.length} weapon lines read into "character". Click a field to change it.`
                : 'No form fields in this PDF. Use "+ Add text" to type anywhere on the sheet.');
   } catch (err) { console.error(err); say('Could not open that PDF: ' + err.message); }
@@ -694,11 +860,11 @@ function makeField(a) {
     el = document.createElement(a.multiLine ? 'textarea' : 'input');
     el.value = Array.isArray(v) ? v.join('\n') : (v ?? '');
     if (a.maxLen) el.maxLength = a.maxLen;
-    el.addEventListener('input', () => { edits[name] = { type: 'text', value: el.value }; });
+    el.addEventListener('input', () => { const before = fieldText(name); edits[name] = { type: 'text', value: el.value }; record(name, before, el.value); });
   } else if (a.fieldType === 'Btn' && a.checkBox) {
     el = document.createElement('input'); el.type = 'checkbox';
     el.checked = !!v && v !== 'Off';
-    el.addEventListener('change', () => { edits[name] = { type: 'check', value: el.checked }; });
+    el.addEventListener('change', () => { const before = !!currentValue(name); edits[name] = { type: 'check', value: el.checked }; record(name, before, el.checked); });
   } else if (a.fieldType === 'Btn' && a.radioButton) {
     el = document.createElement('input'); el.type = 'radio'; el.name = name;
     el.checked = v === a.buttonValue;
@@ -770,6 +936,8 @@ async function download() {
     sheetState.extraPages = added;
     doc.getInfoDict().set(PDFLib.PDFName.of(STATE_KEY), PDFLib.PDFHexString.fromText(JSON.stringify(sheetState)));
     const out = await doc.save();
+    savedStamp = stamp();
+    markUnsaved();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
     a.download = fileName + '-edited.pdf';
@@ -781,12 +949,31 @@ async function download() {
 
 $('pages').addEventListener('input', () => { if (!writing) refreshCharacter(); });
 $('pages').addEventListener('change', () => { if (!writing) refreshCharacter(); });
+// leaving a box ends its undo step (typing in it again later is a new step)
+$('pages').addEventListener('focusout', e => { if (step && !step.tx && step.field === e.target.dataset?.field) closeStep(); });
 addEventListener('resize', closeSuggest);
+// Ctrl+Z / Ctrl+Y on the sheet. Other text boxes (the roller, level up, the effects tray) keep their own undo.
+addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !bytes) return;
+  const k = e.key.toLowerCase(), back = k === 'z' && !e.shiftKey, fwd = k === 'y' || k === 'z' && e.shiftKey;
+  if (!back && !fwd) return;
+  const t = e.target;
+  if (t.matches?.('input, textarea, select, [contenteditable]') && !t.classList.contains('field')) return;
+  if (document.querySelector('.ask-back')) return; // a question is open
+  e.preventDefault();
+  back ? undo() : redo();
+});
+$('undo').addEventListener('click', undo);
+$('redo').addEventListener('click', redo);
+for (const ev of ['effects-change', 'resources-change', 'sheet-state-change']) document.addEventListener(ev, () => { syncState(); markUnsaved(); });
+addEventListener('beforeunload', e => { if (unsaved()) { e.preventDefault(); e.returnValue = ''; } });
 Object.assign(window, { character, fields, setStat, getField: currentValue, sheetState, pdfHooks,
-  calc: { weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS } }); // used by roller.js
+  calc: { weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor } }); // used by roller.js
 // Reading and writing the sheet by stat key, for levelup.js. set() refreshes "character" (and the boxes that follow).
 window.sheet = {
   get map() { return sheetMap; },
+  get loaded() { return !!bytes; },
+  transaction, undo, redo,
   field: key => fieldOf[key] ?? null,
   get: currentValue,
   set(name, value) { const ok = writeField(name, value); if (ok) refreshCharacter(); return ok; },

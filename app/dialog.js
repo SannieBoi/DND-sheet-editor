@@ -28,4 +28,28 @@ window.ask = ({ title, text, body = null, buttons = [{ label: 'OK', value: true,
   document.body.append(back);
   (back.querySelector('.btn.primary') || back.querySelector('.btn')).focus();
 });
+
+/* A window that is not modal and can be dragged by its title bar (level up, rests): window.draggable(win, handle)
+   returns place(x, y), which keeps at least the bar on screen. Offsets are used, not the bounding box: that one moves
+   while the window pops in. */
+window.draggable = (win, handle) => {
+  const place = win.place = (x, y) => {
+    win.style.left = Math.max(120 - win.offsetWidth, Math.min(innerWidth - 120, x)) + 'px';
+    win.style.top = Math.max(0, Math.min(innerHeight - 44, y)) + 'px';
+  };
+  handle.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const dx = e.clientX - win.offsetLeft, dy = e.clientY - win.offsetTop;
+    try { handle.setPointerCapture(e.pointerId); } catch { /* not a real pointer */ }
+    win.classList.add('dragging');
+    const move = ev => place(ev.clientX - dx, ev.clientY - dy);
+    const up = () => { win.classList.remove('dragging'); handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+  return place;
+};
+addEventListener('resize', () => { for (const w of document.querySelectorAll('.lu')) w.place?.(w.offsetLeft, w.offsetTop); });
 })();

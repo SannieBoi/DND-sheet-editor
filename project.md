@@ -23,28 +23,35 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | data/feats-more.js, data/species-more.js | push onto `DND.feats` / `DND.species` (load right after feats.js / species.js): the rest of the 2024 PHB (58 feats, Aasimar) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public lists; "see the book"): feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light; and EVERY species on D&D Beyond's species list (user asked for all, no duplicates; official + third-party). 140 feats, 172 species. Species dedupe rule is in the comment above `listed` (2024 > newest official > third-party; MotM-replaced names dropped; 2014 ability bonuses stripped from trait names). New fields documented in their headers (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
-| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). |
+| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests; `.lu` styles). |
 | app/effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
 | marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
-| app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice tabs, log, animations. |
+| app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
+| app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations. |
 | app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. See "Level up" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (262 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (353 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
   `classes, level, profBonus, mods{STR..}, feats, speciesData, lineage, backgroundData, spellcasting{ability,mod,attack,dc},
   critRange, weapons[{name,bonus,damage,weapon,spell,magic,calc,fields}], spells[{spell,from}], skills, saves, initiativeMod`.
-- `window.calc` = `{ weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS }` (script.js).
-- `window.sheet` (script.js, for levelup.js) = `{ map (the sheets.js entry or null), field(key) -> PDF field name, get(name),
+- `window.calc` = `{ weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor(classes) }` (script.js;
+  slotsFor = slots per level of [{key, level}]: multiclass caster levels, Pact slots added at their level).
+- `window.sheet` (script.js, for levelup.js / rest.js / marble.js) = `{ map (the sheets.js entry or null), loaded, field(key) -> PDF field name, get(name),
   set(name, value) (writes + refreshCharacter; checkboxes take true/false), profBox(key) ('skill:X'/'save:AB' checkbox),
   multiline(name), spellLines() -> [{field, level (0 = cantrips, null = any), row (official sheet: level/time/range/notes/conc/ritual/material)}],
-  writeSpell(line, spell), spellNamed(text) }`.
+  writeSpell(line, spell), spellNamed(text), transaction(label, fn) (one Undo step for every write + sheetState change in fn), undo(), redo() }`.
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
-  `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages }`.
+  `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages,
+  concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
+  hitDiceSpent: {die: n} }`. Empty maps are deleted, not left as {}.
+- `window.resources` (rest.js) = `{ slots() -> [{level,total,used,left}], slotsLeft(l), slotTotal(l), useSlot(l), restoreSlot(l) (false when
+  nothing to do), list() -> class features [{id,name,max,used,left,back,note}], setUsed(id, n), hitDice() -> {dice:[{die,total,spent,left}], spent, box},
+  view(), slotStrip(), openRest('short'|'long') }`. Every change goes through sheet.transaction, then fires `resources-change`.
 - `window.pdfHooks` — `async (doc, PDFLib) => pagesAdded`; appended pages are hidden on reopen (`extraPages`) and rebuilt on download.
 - `window.effects` = `{ forRoll({kind,ability,skill,arms}), speed(base), active(), register(provider), changed(), conditions,
   concentration() -> {name, slot, duration} | null, concentrate(name|null, slot), interrupt(doing, why, endLabel) -> 'end'|'keep'|null|'none',
@@ -52,7 +59,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Effect rules can target a `skill` (e.g. Stealth); the roller passes `skill` for skill checks.
 - `window.roller.save(ability, title)`, `window.marble = { parts, setScore, setMode, applySpread, clearAll }`,
   `window.setStat(key, v)`, `window.getField(name)`.
-- Events on `document`: `character-change`, `sheet-loaded`, `effects-change`,
+- `window.marble.hourPasses()` (the page's "An hour passes" button).
+- Events on `document`: `character-change`, `sheet-loaded`, `effects-change`, `resources-change` (rest.js), `sheet-state-change`
+  (Undo/Redo replaced sheetState: effects, marble, rest and roller redraw),
   `test-rolled` (roller.js, every check/save/initiative incl. "Again": detail `{kind:'Check'|'Save'|'Initiative', ability, skill, title, total, autoFail, purpose}`;
   purpose 'concentration' = a concentration save, which Killing Marble ignores). `roller.save(ability, title, purpose)`.
   roller.js `log()` returns the entry's element; `castSpell()` returns it too (cast() adds the concentration line).
@@ -73,6 +82,16 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - Writes from code go through `writeField()` (sets `writing` so listeners don't loop, records `edits` for download;
   checkboxes take true/false and fire 'change').
 - Sheet numbers win over computed ones in the roller (magic items etc.); computed values used when boxes are empty/toggles change.
+- Undo/redo (`history`, `record`, `transaction`, `replay`): the field listeners record every change (before/after). A step =
+  one box you typed in until it loses focus (`focusout` closes it) or a checkbox click, plus everything code wrote while it
+  was open (propagation); a code write outside a step is its own step (closed in a microtask); `transaction()` groups code
+  actions and also stores sheetState JSON before/after. sheetState changes made outside a step (tray, marble, concentration)
+  become their own steps via `syncState()` on `effects-change`/`resources-change` (so undoing a rest never drops a later
+  effect). Replay writes the stored values with `replaying` set, then `snap = null` before refreshing, so no propagation
+  runs (the stored boxes are already right). Ctrl+Z/Y only when focus is on a sheet field or nothing typed (other inputs
+  keep native undo). History is cleared after a load (auto-filled boxes aren't undoable). 200 steps max.
+- Unsaved changes: `stamp()` = edits that differ from the PDF + notes + sheetState; compared with the stamp at load / last
+  download -> `.unsaved` dot on Download and `beforeunload` asks. (Loading another PDF does not ask; not requested.)
 
 ## Rules data (source of truth: D&D Beyond Basic Rules 2024, www.dndbeyond.com/sources/dnd/br-2024)
 - Checked against the source on 2026-10-03 (scripts in the session scratchpad parsed the pages with curl + html.parser).
@@ -151,10 +170,50 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Torso adjacent to everything; others adjacent to torso only. "Clear all marble" (2 clicks) zeroes scores, keeps `lost`.
 - Sides are named as the viewer sees them (user asked): Left arm card/point on the viewer's left. Part ids unchanged.
 - Marble page is in every download while mode is 'marble' (no edits needed); Default mode leaves it out.
+- "An hour passes" (user asked, from their "Becoming marble 2" doc: "a score is given once every hour, and if spreading, a
+  con save is made"): every part with marble that isn't lost or full gains 1 (read as: each infected part, not one point in
+  total). The question lists each change and the rules it reaches; "Apply" or "Apply and roll CON save" (only when a part
+  spreads into an unmarbled neighbour after the hour; the normal verdict / "Apply?" flow follows). One transaction (Undo).
+  One hour per click; rests don't move the marble (their window says so).
+
+## Rests and resources (rest.js) — decisions
+- Spell slots (user's spec): casting never uses a slot by itself; the log entry gets "Use a level N slot (x left)" (then
+  "Used ... · Undo"). No slot left at that level (or none at all, e.g. a Fighter) -> ask first: Cancel / "Cast anyway"; the
+  entry then says "No level N slot left: cast anyway." Only with a sheet loaded. "Again" never offers a slot. Smites
+  (`time` says "immediately after hitting") use a slot per extra-damage roll (also when toggled on an attack card); Hex,
+  Hunter's Mark, Divine Favor get a Cast button that uses the slot, their damage rolls don't. Every levelled spell card shows
+  slot buttons up to 9 (empty levels crossed out) and "Level N slots: x of y left".
+- Totals: the sheet's slots box, else `calc.slotsFor` from the classes. Used: the `slotsExpended1..9` box when the sheet has
+  one (classic WotC sheet: "SlotsRemaining 19-27" is the box PRINTED "Slots Expended", checked against the real PDF;
+  read and written as a number, empty = 0, sheetState ignored for that level), else the official sheet's expended
+  checkboxes (ticked in order) + `sheetState.slotsUsed` overflow, else sheetState only. The user asked for this
+  (2026-10-04: typing expended slots on the sheet must be read and written).
+- Class features: `RESOURCES` in rest.js (id, class, from level, max from the class table row, back: short / short1 (one
+  back on a Short Rest) / long). Includes Lucky's Luck Points (PB). Nothing is spent automatically (Rage toggle, Second Wind
+  etc. don't touch the counters: user rule, never change state on their behalf).
+- Hit Point Dice: total from class levels (else the Hit Dice text); spent in the official sheet's box (Text18) + per-die map
+  in sheetState. Classic sheet (hitDiceTotal "HDTotal" AND hitDice "HD", no spent box): HD = the dice LEFT ("3d8",
+  "3d8 + 2d6" or a plain count, written back in the same style; all spent = "0d8"), as levelup.js already treats it;
+  text it can't read ("d8", dice the classes don't have) falls back to sheetState. Other sheets: sheetState only.
+- Sheet damage text "1d6/8 -1" or "1d6/1d8" (versatile written on one line): roller.js parseDamageText keeps the first die
+  (the user's sheet had it; "/8" used to count as +8).
+- Rest window = level-up window styles, draggable, tick-box review, Apply = one transaction, then a note until Close.
+  Short: roll Hit Point Dice (die + CON, min 1, × to take back), short/short1 features, Pact slots; Arcane Recovery
+  (biggest spent slots first, budget ceil(Wizard level / 2), none 6+) and Sorcerous Restoration are offered UNTICKED
+  (optional uses: `off` rows start unticked, `R.seen`). Long (2024 rules, checked on D&D Beyond): HP to max, Temp HP cleared,
+  all Hit Point Dice back, all slots, all features, Exhaustion -1, official death-save boxes cleared, "End concentration on X"
+  ticked when its duration <= 8 hours; a note at 0 HP (needs 1 HP to start).
+- Weapon Mastery (roller.js): switch "Mastery: X" on the attack card when a class has weaponMastery or the Weapon Master
+  feat. On by default unless the sheet has a line mentioning "master" that names weapons and this one isn't among them.
+  Log line per mastery: Graze (ability mod damage on a miss; "missed" on a nat 1), Topple (DC 8 + mod + PB), Sap / Slow /
+  Push / Nick reminders; Vex: "It hit: Advantage next" sets `state.vex` -> the next weapon or spell attack roll gets
+  Advantage (withEffects `more`), shown on cards with "Drop it"; Cleave: button rolls a second attack ("X (Cleave)") whose
+  first damage part loses a positive ability modifier.
 
 ## Level up (levelup.js) — decisions
-- Button asks first (confirm box), then the window. It is not modal and can be dragged by its title bar (`place()` keeps the
-  bar on screen; uses offsetLeft/Top, not the bounding box, which moves during the pop-in animation).
+- Button asks first (confirm box), then the window. It is not modal and can be dragged by its title bar (`window.draggable`
+  in dialog.js keeps the bar on screen; uses offsetLeft/Top, not the bounding box, which moves during the pop-in animation).
+  Apply runs inside `sheet.transaction`, so one Ctrl+Z takes the whole level up back.
 - Nothing is written until "Apply to sheet" on Review (user's wish). Review lists every change as a tick-box row grouped
   Level / Hit Points / Ability Scores / Proficiencies / Spells / Features / Class numbers (info) / Still to choose (warnings).
   After Apply the window stays open as a note (✓ applied, – skipped) until Close; rows and steps are frozen at apply time.
@@ -189,11 +248,16 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Tough: +2 per level on the sheet, +2 x level when taken; Boon of Fortitude +40; feat `grants` go through collect().
 
 ## Testing
-- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal|feats|concentration`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
+- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal|feats|concentration|rest`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
   XHR (works with --allow-file-access-from-files), fills a Wizard 4 and levels it.
 - concentration.test.js: casting/switching/Undo, conditions, tray form, damage saves (incl. Again), 0 HP, Rage, marble head 10.
+  rest.test.js: slot use from the log / pips / "Cast anyway", Rest tab, Short Rest (Hit Point Dice, Arcane Recovery), Long
+  Rest (slots, Exhaustion, concentration), Undo/Redo of rests and of a stat change (Ctrl+Z/Y), a later tray change as its
+  own step, Fighter features, unsaved dot, classic "Slots Expended" and Hit Dice boxes read/written, "1d6/8 -1" damage. roller.test.js also covers Weapon Mastery (Graze, Vex, Cleave, mastered list);
+  marble.test.js "An hour passes"; official.test.js slot boxes, Hit Dice spent box, undoing rests and the level up.
+- A Fighter casting from the Spell tab now gets the "no slots, cast anyway?" question: tests answer it (`castAnyway`).
   heal.test.js: Life Domain healing. feats.test.js: feat/species data counts, reading feats/species off a sheet (incl.
   look-alike text), roller feats (GWM, Dueling, Piercer crit, Tavern Brawler, Elemental Adept, War Caster), level-up feats
   (prerequisites, search, Tough HP, Resilient, Speedy, Fey Touched spells, an `unsure` feat).
@@ -227,4 +291,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   summary/choices/automation and drop `brief`.
 - Feat automation not done: Lucky,
   Mage Slayer, Sentinel, Heavy Armor Master, Poisoner, Spell Sniper range, Medium Armor Master AC.
-- Marble: per-hour progression is not automated (manual +). Tail debuffs are Claude's suggestion, awaiting user feedback.
+- Marble: tail debuffs are Claude's suggestion, awaiting user feedback. Whether "An hour passes" should also run during
+  rests (1 / 8 hours) is the user's call; for now rests leave the marble alone.
+- Rests/resources not done: species uses (Breath Weapon, Adrenaline Rush ...), subclass uses (Wholeness of Body, Natural
+  Recovery), Second Wind / Lay On Hands rolls from the counters, Magical Cunning's slot recovery, Relentless Rage DC.
+- Ideas suggested to the user and not built yet: Damage/Heal/Temp HP buttons, death saves roller, Heroic Inspiration and
+  Lucky rerolls in the log, copy a roll as text, roller keyboard shortcuts, asking before loading another PDF over unsaved changes.

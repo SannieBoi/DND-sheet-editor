@@ -286,6 +286,7 @@ function concSpells() {
 window.effects = { forRoll, speed, active, conditions: CONDITIONS, register: p => { providers.push(p); }, changed,
   concentration: conc, concentrate, interrupt, askEnd };
 document.addEventListener('sheet-loaded', () => { lastCheck = check = null; render(); });
+document.addEventListener('sheet-state-change', render); // Undo / Redo put sheetState back
 document.addEventListener('character-change', () => { if (!tray.contains(document.activeElement)) render(); });
 render();
 })();

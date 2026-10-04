@@ -16,7 +16,12 @@
   <input id="file" type="file" accept="application/pdf,.pdf" hidden>
   <button id="addText" class="btn" disabled title="Then click anywhere on the sheet to type there">+ Add text</button>
   <button id="download" class="btn primary" disabled>Download with changes</button>
+  <span class="undoredo">
+    <button id="undo" class="btn icon" disabled title="Undo (Ctrl+Z)" aria-label="Undo">&#x21B6;</button>
+    <button id="redo" class="btn icon" disabled title="Redo (Ctrl+Y)" aria-label="Redo">&#x21B7;</button>
+  </span>
   <button id="levelUp" class="btn lvl" disabled title="Gain a level: Hit Points, new features and spells, step by step">&#x2B06; Level up</button>
+  <button id="rest" class="btn rest" disabled title="Short or Long Rest: Hit Point Dice, spell slots and class features back">&#x263E; Rest</button>
   <div id="modeSwitch" class="seg" role="radiogroup" aria-label="Sheet mode" title="Killing Marble adds a Becoming Marble page after the sheet">
     <button role="radio" data-mode="default" aria-checked="true" class="on" disabled>Default</button>
     <button role="radio" data-mode="marble" aria-checked="false" disabled>Killing Marble</button>
@@ -46,6 +51,7 @@
     <button data-tab="save"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.5 7.5-8 9-4.5-1.5-8-4.5-8-9V6z"/></svg>Save</button>
     <button data-tab="init"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h8l-1 8 9-12h-8z"/></svg>Initiative</button>
     <button data-tab="dice"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zM12 7l5 8H7z"/></svg>Dice</button>
+    <button data-tab="rest" title="Spell slots, class features, Hit Point Dice and rests"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Rest</button>
   </nav>
   <section id="rollPick"></section>
   <div id="logHead"><span>Rolls</span><button id="clearLog">Clear</button></div>
@@ -73,6 +79,7 @@
 <script src="app/effects.js"></script>
 <script src="marble/marble-body.js"></script>
 <script src="marble/marble.js"></script>
+<script src="app/rest.js"></script>
 <script src="app/roller.js"></script>
 <script src="app/levelup.js"></script>
 </body>

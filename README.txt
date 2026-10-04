@@ -30,6 +30,8 @@ FULL GUIDE
   - Other fillable sheets whose boxes have sensible names (e.g. "STR", "ClassLevel", "Wpn Name").
 - Nothing is saved until you press "Download with changes". That gives you a new copy of the PDF with your edits.
   Open that copy next time to carry on where you left off.
+- While you have changes that aren't in a downloaded PDF yet, the Download button shows a gold dot, and closing the tab
+  asks first.
 
 2. EDITING THE SHEET
 ------------------------------
@@ -43,6 +45,9 @@ FULL GUIDE
 - Proficiency: tick the box in front of a skill or save and it gains your proficiency bonus.
 - Numbers on the sheet win. If a box already holds a number (for example a +1 weapon), the roller uses it.
 - "+ Add text", then click anywhere on the sheet to write a note there.
+- Undo / Redo: Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z), or the two arrow buttons in the header. One undo takes back one thing
+  you did, together with every box that followed it: change STR and its modifier, skills and attack lines all go back
+  with it. A level up, a rest, a spell slot, an effect you added or a marble score count as one step each.
 - Zoom with the slider on the right, or Ctrl + mouse wheel. Click the % button to go back to 100%.
 
 3. LEVEL UP (gold button in the header)
@@ -71,21 +76,54 @@ Click "Roll" on the right edge to open or close the panel. Pick a tab, pick what
 Disadvantage. There's no limit: roll as often as you like.
 - Attack: your weapon lines and attack spells. Rolls the attack, then damage (crits double the dice). Includes things
   like Rage, Sneak Attack, Great Weapon Fighting, smites and Hunter's Mark.
-- Spell: your spells as cards with their text. Cast at any slot level you have (upcasting adds dice); healing spells add
-  your bonuses (e.g. Life Domain's Disciple of Life).
+  Weapon Mastery (classes that have it, or the Weapon Master feat): a "Mastery" switch on the card. If your sheet lists
+  your mastered weapons on a line with "Mastery" in it (level up writes one), weapons not on that list start switched
+  off. The log then says what the mastery does: Graze (the damage on a miss), Topple (the save DC), Sap, Slow, Push, Nick.
+  Vex has an "It hit" button: your next attack roll gets Advantage. Cleave has a button that rolls the attack against a
+  second creature (its damage leaves out your ability modifier).
+- Spell: your spells as cards with their text, and your spell slots as a row of dots above the list. Cast at any slot
+  level (upcasting adds dice); healing spells add your bonuses (e.g. Life Domain's Disciple of Life).
+  Casting doesn't use a slot by itself: the log line has a "Use a level 3 slot" button (and an Undo). If you have no
+  slot of that level left, it asks first: Cancel or "Cast anyway" (for a Ritual, or a free cast from a feat or species).
+  Smites use a slot each time you roll their extra damage; Hex, Hunter's Mark and Divine Favor when you press Cast.
 - Check: any ability or skill check.
 - Save: any saving throw.
 - Initiative.
 - Dice: any dice you like, e.g. 2d6+3 or 4d6kh3 (roll 4d6, keep the highest 3).
+- Rest: see "Rests, spell slots and class features" below.
 Feats on your sheet join in by themselves: Great Weapon Master (+Proficiency Bonus with Heavy weapons), Dueling (+2),
 Thrown Weapon Fighting, Charger (+1d8 when you charge), Unarmed Fighting and Tavern Brawler (bigger Unarmed Strike die),
 Piercer (one more die on a crit), Elemental Adept (1s count as 2 for your type), War Caster (Advantage on concentration
 saves). Each shows as a switch on the attack card, so you can turn it off. Sharpshooter, Crossbow Expert, Slasher, Crusher,
 Polearm Master and Shield Master show a short reminder on the card.
 Every roll goes into the log below with Again / Advantage / Disadvantage buttons. "Clear" empties the log.
-Times in the log are in 24-hour format.
+Times in the log are in 24-hour format. "Again" is a reroll: it never uses another spell slot.
 
-5. EFFECTS AND CONCENTRATION (bottom left)
+5. RESTS, SPELL SLOTS AND CLASS FEATURES (the Rest tab, and the Rest button in the header)
+------------------------------
+The Rest tab in the roller shows, as dots: your spell slots, class features with limited uses (Rage, Second Wind,
+Action Surge, Channel Divinity, Wild Shape, Bardic Inspiration, Focus Points, Sorcery Points, Lay On Hands, Luck Points
+from the Lucky feat ...) and your Hit Point Dice. Click a full dot to use one, an empty dot to get it back. Big pools
+(Lay On Hands) have a number box with − and +.
+- Slots: the total for each level is the number in your sheet's slots box (else your class table). Used slots go where
+  your sheet keeps them: the "Slots Expended" box (the classic sheet; type in it and the tool follows), the "expended"
+  checkboxes on the official 2024 sheet, or, on a sheet with neither, inside the PDF.
+- Hit Point Dice: the same idea. On the classic sheet the big Hit Dice box (under "Total") holds the dice you have left,
+  e.g. "3d8"; on the official 2024 sheet the "spent" box holds how many you spent. Type in them and the tool follows; a
+  rest writes them for you.
+- Short Rest (1 hour) or Long Rest (8 hours): from the Rest tab or the "Rest" button in the header. A window you can drag
+  opens; nothing changes until you press Apply.
+  - Short Rest: roll Hit Point Dice to heal (each heals the die + your CON modifier, at least 1; roll as many as you
+    want, × takes a roll back). Features that come back on a Short Rest return (Action Surge, Focus Points, one Rage, one
+    Channel Divinity ...), Warlock Pact Magic slots too. Arcane Recovery and Sorcerous Restoration are offered unticked:
+    tick them to use them.
+  - Long Rest: full HP, Temporary HP gone, all Hit Point Dice and spell slots back, every feature back, Exhaustion goes
+    down by 1, Death Saving Throws are cleared, and it offers to end concentration (ticked if the spell would have run
+    out during 8 hours).
+  - Every change is listed with a tick box: untick what you don't want. After Apply the window stays open as a list of
+    what changed until you close it. One Undo (Ctrl+Z) takes the whole rest back.
+
+6. EFFECTS AND CONCENTRATION (bottom left)
 ------------------------------
 The Effects tray lists everything that changes your rolls. The roller applies them for you.
 - "+ Add": a condition (Poisoned, Prone, Exhaustion 2 ...), your own buff or debuff (advantage, disadvantage, a bonus, a
@@ -101,20 +139,23 @@ The Effects tray lists everything that changes your rolls. The roller applies th
   - drop to 0 HP.
 - Effects and concentration are saved inside the downloaded PDF.
 
-6. KILLING MARBLE
+7. KILLING MARBLE
 ------------------------------
 Switch the header from "Default" to "Killing Marble" to add the Becoming Marble page after the sheet. Set each body
 part's marble score there; its penalties show in the Effects tray and the roller applies them. After a CON save, parts
 that are spreading show whether they resisted, and a failed one offers "Apply?". "Clear all marble" (click twice) resets
 the scores. The page is part of every download while the switch is on.
+"An hour passes": every part that has marble gains 1 (parts at 0, full or lost stay). It shows the changes first, with
+what each part reaches, then Apply, or "Apply and roll CON save" when a part spreads into a part without marble.
+A rest doesn't change the marble: use "An hour passes" for each hour.
 
-7. TIPS
+8. TIPS
 ------------------------------
 - If a stat isn't picked up, check the box's spelling (e.g. "Longsword +1" works, "L.sword" doesn't).
 - If something looks old after an update, reload the page (F5).
 - The Google font loads from the internet when you're online; offline the page uses a fallback font and works the same.
 
-8. NOT INCLUDED YET
+9. NOT INCLUDED YET
 ------------------------------
 - Species: all 172 on D&D Beyond (one per name) are recognised and suggested, but only the free-rules ones and the Aasimar
   come with their rules. The others have their book and trait names only (that is all D&D Beyond shows without the

@@ -26,7 +26,8 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const MODES = { adv: 'Advantage', dis: 'Disadvantage' };
 const DMG_TYPES = D.rules.damageTypes.map(t => t.toLowerCase());
 
-const state = { tab: 'attack', picks: {}, opts: {}, search: '', count: 1, expr: '' };
+// vex: { name } after a hit with a Vex weapon: your next attack roll has Advantage (Weapon Mastery)
+const state = { tab: 'attack', picks: {}, opts: {}, search: '', count: 1, expr: '', vex: null };
 const opt = key => state.opts[key] ||= {};
 
 // ---- Dice ---------------------------------------------------------------------------
@@ -118,10 +119,41 @@ const lifeHealing = (s, slot) => {
   return lvl ? { disciple: 2 + slot, healer: lvl >= 6 ? 2 + slot : 0, supreme: lvl >= 17 } : null;
 };
 const spellNamed = name => D.spells.find(s => s.name === name);
+const sheetText = () => Object.values(window.fields || {}).filter(v => typeof v === 'string').join('\n');
+// Weapon Mastery: from a class that has it or the Weapon Master feat. The weapons named on a sheet line that mentions
+// mastery ("Weapon Mastery (Fighter 1): Longsword, Greatsword") are the ones mastered; with no such list, any weapon.
+const hasMastery = () => (C.classes || []).some(x => D.classes[x.key].weaponMastery) || hasFeat('Weapon Master');
+function masteredByDefault(w) {
+  const lines = sheetText().split('\n').filter(l => /master/i.test(l));
+  const named = D.weapons.filter(x => lines.some(l => new RegExp(`\\b${x.name}s?\\b`, 'i').test(l)));
+  return !named.length || named.includes(w);
+}
+// What a mastery property does after this attack (a line for the log, with a button for Vex and Cleave).
+// s = attackSetup(); s.abilityMod = the ability modifier used for the attack.
+function masteryNotes(m, s, test, again, item, o) {
+  const ab = s.abilityMod, type = s.parts[0]?.type || s.w.dmg, pb = C.profBonus || 2, hit = test.fumble ? null : test;
+  const notes = {
+    graze: test.fumble ? `the attack missed, but the target still takes ${Math.max(0, ab)} ${type} damage.`
+      : `if this misses, the target still takes ${Math.max(0, ab)} ${type} damage (your ${s.ability} modifier).`,
+    topple: `on a hit, the target makes a DC ${8 + ab + pb} Constitution save or falls Prone.`,
+    sap: 'on a hit, the target has Disadvantage on its next attack roll before your next turn.',
+    slow: "on a hit that deals damage, the target's Speed drops by 10 ft until your next turn.",
+    push: 'on a hit, you can push a Large or smaller target up to 10 ft straight away from you.',
+    vex: 'on a hit that deals damage, your next attack roll against it before the end of your next turn has Advantage.',
+    cleave: 'on a hit, make one more melee attack against a second creature within 5 ft of the first (once per turn). Its damage leaves out your ability modifier.',
+    nick: "the Light property's extra attack can be part of the Attack action instead of a Bonus Action (once per turn)."
+  };
+  const btn = !hit || again ? null
+    : m === 'vex' ? h('button', { onclick: e => { state.vex = { name: item.name }; e.target.replaceWith('Your next attack has Advantage.'); render(); } }, 'It hit: Advantage next')
+    : m === 'cleave' && !o.cleave ? h('button', { onclick: () => rollAttack(item, null, { ...o, cleave: true }) }, 'Cleave: attack a 2nd creature') : null;
+  return h('p', { class: 'mastery-line' }, h('b', {}, `${cap(m)}: `), notes[m], btn ? ' ' : null, btn);
+}
 
-// Damage text from the sheet, e.g. "1d8+4 slashing" -> parts (null if there are no numbers)
+// Damage text from the sheet, e.g. "1d8+4 slashing" -> parts (null if there are no numbers). A versatile weapon written
+// "1d6/8 -1" or "1d6/1d8" uses its first die (the "/8" is the two-handed die, not +8).
 function parseDamageText(text, fallbackType = '') {
-  const s = String(text ?? '').toLowerCase(), type = DMG_TYPES.find(t => s.includes(t)) || fallbackType;
+  const s = String(text ?? '').toLowerCase().replace(/(\d+\s*d\s*\d+)\s*\/\s*(?:\d*\s*d\s*)?\d+/g, '$1');
+  const type = DMG_TYPES.find(t => s.includes(t)) || fallbackType;
   const parts = [];
   let flat = 0;
   for (const m of s.split(/\(|[a-ce-z]{2,}/)[0].matchAll(/([+-]?)\s*(\d+)(?:d(\d+))?/g)) {
@@ -166,9 +198,11 @@ function attackSetup(item, o) {
   }
   if (o.shillelagh) for (const p of parts) p.type = 'force';
   const type = parts[0]?.type || w?.dmg || '', ability = a?.ability ?? 'STR';
+  const abilityMod = casting ? casting.mod : C.mods?.[ability] ?? 0;
   const melee = w ? w.kind === 'melee' : true;
   if (parts[0]) {
     parts[0].label = item.name;
+    if (o.cleave) parts[0].flat -= Math.max(0, abilityMod); // Cleave: the second creature's damage leaves out a positive modifier
     parts[0].gwf = (C.feats || []).includes('Great Weapon Fighting') && melee && !!(w?.props.includes('two-handed') || o.twoHanded);
     parts[0].savage = !!o.savage;
   }
@@ -179,6 +213,13 @@ function attackSetup(item, o) {
   const arms = ['right', 'left'].filter(a => o['arm:' + a] ?? (a === 'right' || twoHands));
   if (window.sheetState?.mode === 'marble') for (const a of ['left', 'right']) toggle('arm:' + a, `${cap(a)} arm`, { on: arms.includes(a) });
   if (w?.versatile) toggle('twoHanded', `Two-handed (${w.versatile})`); // weaponAttack switches the die
+  // Weapon Mastery: on when the weapon is one you master (see masteredByDefault)
+  let mastery = null;
+  if (w?.mastery && hasMastery()) {
+    const on = o.mastery ?? masteredByDefault(w);
+    toggle('mastery', `Mastery: ${cap(w.mastery)}`, { on });
+    if (on) mastery = w.mastery;
+  }
   // Feats. On by default where they nearly always apply (Great Weapon Master, Dueling, Thrown Weapon Fighting when thrown)
   const pb = C.profBonus || 2, heavy = !!w?.props.includes('heavy'), notes = [];
   const featBonus = (id, label, on, part) => { toggle(id, label, { on: o[id] ?? on }); if (o[id] ?? on) extras.push(part); };
@@ -206,10 +247,12 @@ function attackSetup(item, o) {
     const sa = parseDice(rogue.sneakAttack);
     if (toggle('sneak', `Sneak Attack ${diceText(sa)}`)) extras.push({ label: 'Sneak Attack', ...sa, type });
   }
+  const riders = [];
   for (const { spell: s } of C.spells || []) {
     if (!s.rider) continue;
     const slot = Math.max(s.level, o['slot:' + s.name] || s.level);
     if (toggle('rider:' + s.name, s.name, { spell: s, slot })) {
+      riders.push({ spell: s, slot });
       for (const p of M.spellRoll(s, slot).parts) extras.push({ label: s.name, ...p });
     }
   }
@@ -222,17 +265,24 @@ function attackSetup(item, o) {
   toHit += parseInt(o.extraHit, 10) || 0;
   for (const p of parseDamageText(o.extraDmg, type) || []) extras.push({ label: 'Extra', ...p });
   for (const p of window.effects?.forRoll({ kind: 'damage', ability, arms }).parts || []) extras.push({ label: p.name, n: 0, d: 0, flat: p.mod, type });
-  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, source, melee, w, arms, notes };
+  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, abilityMod, source, melee, w, arms, notes, mastery, riders };
 }
 
 const knownSpells = () => (C.spells || []).map(x => x.spell);
 
 // ---- Rolling (each call adds a new entry to the log) ---------------------------------
-function rollAttack(item, mode, o = { ...opt(item.key) }) {
-  const s = attackSetup(item, o), fx = withEffects({ kind: 'attack', ability: s.ability, arms: s.arms }, mode);
+// again: a repeat from the log ("Again"), which uses no slot and no Vex of its own; vex: this roll has Vex's Advantage
+function rollAttack(item, mode, o = { ...opt(item.key) }, again = false, vex = !again && !!state.vex) {
+  if (vex && !again) state.vex = null; // used up by this attack
+  const s = attackSetup(item, o), fx = withEffects({ kind: 'attack', ability: s.ability, arms: s.arms }, mode, vex ? ['Vex'] : []);
   const test = d20Test(mode, s.toHit, s.testDice, C.critRange || 20, fx);
-  log({ title: item.name, tag: ['Attack', fx.tag], lines: [{ test, damage: s.parts.length && !test.fumble ? rollDamage(s.parts, test.crit) : null }],
-    notes: fx.notes, again: m => rollAttack(item, m, o), test: true, mode });
+  const node = log({ title: item.name + (o.cleave ? ' (Cleave)' : ''), tag: ['Attack', fx.tag],
+    lines: [{ test, damage: s.parts.length && !test.fumble ? rollDamage(s.parts, test.crit) : null }],
+    notes: fx.notes, extra: s.mastery ? [masteryNotes(s.mastery, s, test, again, item, o)] : [],
+    again: m => rollAttack(item, m, o, true, vex), test: true, mode });
+  // a smite toggled on is a spell cast with a slot
+  if (!again) for (const r of s.riders) if (castPerHit(r.spell)) slotLine(node, r.spell, r.slot, false);
+  if (vex) render();
 }
 
 function rollAttackDamage(item, crit, o = { ...opt(item.key) }) {
@@ -253,7 +303,12 @@ function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
   if (parts.length && what !== 'heal') {
     for (const p of window.effects?.forRoll({ kind: 'damage', ability: sc.ability }).parts || []) parts.push({ label: p.name, n: 0, d: 0, flat: p.mod, type: parts[0].type });
   }
-  const fx = withEffects({ kind: 'attack', ability: sc.ability }, mode);
+  // Vex from a weapon hit: the next attack roll has Advantage (kept in o, so "Again" repeats it)
+  if (s.atk && what === 'cast' && o.vex == null) {
+    o = { ...o, vex: !!state.vex };
+    if (o.vex) { state.vex = null; queueMicrotask(render); }
+  }
+  const vex = !!o.vex, fx = withEffects({ kind: 'attack', ability: sc.ability }, mode, vex ? ['Vex'] : []);
   const lines = [], many = r.count > 1, notes = [s.note];
   if (what === 'start') lines.push({});
   else if (what === 'heal') {
@@ -278,17 +333,50 @@ function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
     again: m => castSpell(s, m, what, o), test: !!s.atk && what === 'cast', mode });
 }
 
-// Casting from a spell card. A concentration spell starts concentration (the log entry can undo it). If you are
-// concentrating on another spell it asks first: switch, or cast and keep the old one (maybe you're only trying it out).
+// Smites are cast each time they add their damage (right after a hit); Hex, Hunter's Mark, Divine Favor are cast once
+const castPerHit = s => s.level > 0 && /immediately after hitting/i.test(s.time);
+
+// After a cast with a spell slot: a line in the log entry with a button that marks the slot as used (and an Undo).
+// none: there was no slot left and you cast it anyway. Slots are kept by rest.js (window.resources).
+function slotLine(node, s, slot, none) {
+  const R = window.resources;
+  if (!R || !window.sheet?.loaded || !s.level || !node) return;
+  const p = h('p', { class: 'slot-line' });
+  const show = () => {
+    const left = R.slotsLeft(slot);
+    p.replaceChildren(none ? `No level ${slot} slot left: cast anyway.`
+      : left ? h('button', { class: 'use', onclick: () => {
+        if (!R.useSlot(slot)) return show();
+        p.replaceChildren(`Used a level ${slot} slot · ${R.slotsLeft(slot)} left `, h('button', { onclick: () => { R.restoreSlot(slot); show(); } }, 'Undo'));
+      } }, `Use a level ${slot} slot`, h('small', {}, ` (${left} left)`)) : `No level ${slot} slots left.`);
+  };
+  show();
+  node.querySelector('footer').before(p);
+}
+
+// Casting from a spell card. A spell with a level needs a slot: with none left it asks first ("Cast anyway"); the log
+// entry then has a button to mark the slot used. A concentration spell starts concentration (the log entry can undo it).
+// If you are concentrating on another spell it asks first: switch, or cast and keep the old one (maybe you're only trying it out).
 async function cast(s, slot, run) {
-  const fx = window.effects, prev = fx.concentration();
-  if (!s.conc) return run();
+  const fx = window.effects, R = window.resources;
+  let none = false;
+  if (s.level > 0 && R && window.sheet?.loaded && R.slotsLeft(slot) <= 0) {
+    const total = R.slotTotal(slot);
+    const yes = await window.ask({ title: total ? `No level ${slot} slots left` : `No level ${slot} spell slots`,
+      text: `${total ? `All ${total} of your level ${slot} slots are used.` : `Your sheet shows no level ${slot} spell slots.`} Cast ${s.name} anyway? ` +
+        '(For example as a Ritual, or for free from a feat or your species.)',
+      buttons: [{ label: 'Cancel', value: false }, { label: 'Cast anyway', value: true, primary: true }] });
+    if (!yes) return;
+    none = true;
+  }
+  const prev = fx.concentration(), go = () => { const node = run(); slotLine(node, s, slot, none); return node; };
+  if (!s.conc) return go();
   if (prev && prev.name !== s.name) {
     const a = await fx.interrupt('Cast', `${s.name} needs concentration too, so casting it ends ${prev.name}.`, `Cast, switch to ${s.name}`);
     if (!a) return;
-    if (a === 'keep') return run().querySelector('footer').before(h('p', { class: 'conc-line' }, `Still concentrating on ${prev.name}.`));
+    if (a === 'keep') return go().querySelector('footer').before(h('p', { class: 'conc-line' }, `Still concentrating on ${prev.name}.`));
   }
-  const node = run();
+  const node = go();
   fx.concentrate(s.name, s.level ? slot : null);
   const undo = h('button', { onclick: () => { fx.concentrate(prev?.name ?? null, prev?.slot ?? null); undo.replaceWith('(undone)'); } }, 'Undo');
   node.querySelector('footer').before(h('p', { class: 'conc-line' }, `Concentrating on ${s.name} now. `, undo));
@@ -379,6 +467,7 @@ function entryView(e) {
     li.append(h('div', { class: 'grand' }, tests.length ? 'Total if all hit: ' : 'Total: ', h('b', {}, sum(e.lines.map(l => l.damage?.total ?? 0)))));
   }
   for (const n of e.notes || []) if (n) li.append(h('p', { class: 'note' }, n));
+  li.append(...e.extra || []);
   // "Again" repeats the roll exactly; the other buttons switch between normal, Advantage and Disadvantage
   li.append(h('footer', {}, h('button', { onclick: () => e.again(e.mode) }, '↻ Again'),
     e.test ? [[null, 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']].filter(([m]) => m !== (e.mode || null))
@@ -456,9 +545,11 @@ function attackView() {
       w.range ? `range ${w.range.join('/')}` : null].filter(Boolean).join(' · ')) : null,
     h('div', { class: 'nums' }, numBox('To hit', fmt(s.toHit), s.ability), numBox('Damage', partsText(s.parts), C.critRange < 20 ? `crit on ${C.critRange}–20` : null)),
     h('p', { class: 'src' }, s.source),
-    mastery ? h('p', { class: 'mastery' }, h('b', {}, `Mastery: ${cap(w.mastery)}. `), D.masteryProperties[w.mastery]) : null,
+    mastery ? h('p', { class: 'mastery' }, h('b', {}, `Mastery: ${cap(w.mastery)}. `), D.masteryProperties[w.mastery],
+      s.mastery ? null : h('i', {}, ' (switched off below)')) : null,
     s.notes.map(([feat, text]) => h('p', { class: 'mastery' }, h('b', {}, `${feat}: `), text)),
     effectsNote({ kind: 'attack', ability: s.ability, arms: s.arms }),
+    vexNote(),
     h('div', { class: 'chips' }, s.toggles.map(t => [chip(t.label, t.on ?? o[t.id], async () => {
       const on = !(t.on ?? o[t.id]);
       if (on && t.id === 'rage' && !await window.effects.interrupt('Rage', "While you rage you can't concentrate on spells.")) return;
@@ -472,6 +563,10 @@ function attackView() {
       h('button', { onclick: () => rollAttackDamage(picked, false) }, 'Damage only'),
       h('button', { onclick: () => rollAttackDamage(picked, true) }, 'Critical damage')));
 }
+
+// Vex waiting for your next attack roll (any weapon or spell attack), with a button to drop it
+const vexNote = () => state.vex ? h('p', { class: 'fxnote conc' }, h('b', {}, 'Vex: '), `your next attack roll has Advantage (from your ${state.vex.name} hit). `,
+  h('button', { class: 'linkbtn', onclick: () => { state.vex = null; render(); } }, 'Drop it')) : null;
 
 function spellMeta(s) {
   const r = M.spellRoll(s);
@@ -497,17 +592,20 @@ function spellView() {
     }
     const known = knownSpells(), groups = {};
     for (const sp of known) (groups[sp.level] ||= []).push(sp);
-    return [search, needSheet(),
+    return [search, window.resources?.slotStrip(), needSheet(),
       known.length ? Object.entries(groups).map(([lvl, list]) => [h('h4', {}, +lvl ? `Level ${lvl}` : 'Cantrips'), h('div', { class: 'items' }, list.map(spellRow))])
         : h('p', { class: 'hint' }, 'No spells found on the sheet. Search above to cast any spell.')];
   }
   const o = opt('spell:' + s.name), slot = Math.max(s.level, o.slot || s.level), r = M.spellRoll(s, slot), sc = C.spellcasting;
   const scales = s.level > 0 && (s.up || s.upCount);
   const sub = [s.level ? `Level ${s.level} ${s.school}` : `${s.school} cantrip`, s.time, s.range, s.duration].join(' · ');
-  const btns = [];
-  if (s.rider) {
-    if (s.conc) btns.push(h('div', { class: 'rollbtns one' }, h('button', { class: 'go', onclick: () => cast(s, slot, () => castSpell(s, null, 'start')) }, 'Cast (concentrate)')));
-    btns.push(h('div', { class: 'rollbtns two' }, h('button', { class: s.conc ? null : 'go', onclick: () => castSpell(s, null, 'damage') }, 'Roll extra damage'),
+  const btns = [], RS = window.sheet?.loaded && window.resources;
+  if (s.rider && castPerHit(s)) { // a smite: each extra damage roll is a cast
+    btns.push(h('div', { class: 'rollbtns two' }, h('button', { class: 'go', onclick: () => cast(s, slot, () => castSpell(s, null, 'damage')) }, 'Roll extra damage'),
+      h('button', { onclick: () => cast(s, slot, () => castSpell(s, null, 'crit')) }, 'Critical damage')));
+  } else if (s.rider) {
+    btns.push(h('div', { class: 'rollbtns one' }, h('button', { class: 'go', onclick: () => cast(s, slot, () => castSpell(s, null, 'start')) }, s.conc ? 'Cast (concentrate)' : 'Cast')));
+    btns.push(h('div', { class: 'rollbtns two' }, h('button', { onclick: () => castSpell(s, null, 'damage') }, 'Roll extra damage'),
       h('button', { onclick: () => castSpell(s, null, 'crit') }, 'Critical damage')));
   } else if (s.atk) btns.push(rollButtons(m => cast(s, slot, () => castSpell(s, m)), r.count > 1 ? `Cast (${r.count} ${unitOf(s).toLowerCase()}s)` : 'Cast'));
   else if (s.dmg || !s.heal) btns.push(h('div', { class: 'rollbtns one' }, h('button', { class: 'go', onclick: () => cast(s, slot, () => castSpell(s)) }, s.dmg ? 'Cast & roll damage' : 'Cast')));
@@ -531,9 +629,16 @@ function spellView() {
       s.save ? numBox(`${s.save} save`, `DC ${r.dc}`, s.half ? 'half on success' : null) : null,
       r.parts.length ? numBox(s.rider ? 'Extra damage' : 'Damage', r.text) : null,
       r.heal ? numBox(s.temp ? 'Temp HP' : 'Healing', healText, healSub) : null),
-    scales || (s.level > 0 && s.heal && s.up) ? h('div', { class: 'slots' }, h('small', {}, 'Slot'),
-      Array.from({ length: 10 - s.level }, (_, i) => s.level + i).map(l => h('button', { class: 'slotbtn' + (l === slot ? ' on' : ''),
-        onclick: () => { o.slot = l; render(); } }, l))) : null,
+    // slot levels: every spell with a level can use a higher slot (it only gets stronger if it scales)
+    scales || (s.level > 0 && s.heal && s.up) || (s.level > 0 && RS) ? h('div', { class: 'slots' }, h('small', {}, 'Slot'),
+      Array.from({ length: 10 - s.level }, (_, i) => s.level + i).map(l => {
+        const left = RS ? RS.slotsLeft(l) : null;
+        return h('button', { class: 'slotbtn' + (l === slot ? ' on' : '') + (left === 0 ? ' none' : ''), title: left == null ? null : `${left} level ${l} slot${left === 1 ? '' : 's'} left`,
+          onclick: () => { o.slot = l; render(); } }, l);
+      })) : null,
+    s.level > 0 && RS ? h('p', { class: 'slotleft' + (RS.slotsLeft(slot) ? '' : ' none') },
+      RS.slotTotal(slot) ? `Level ${slot} slots: ${RS.slotsLeft(slot)} of ${RS.slotTotal(slot)} left` : `No level ${slot} slots on your sheet`,
+      s.level < slot && !scales && !(s.heal && s.up) ? ' (a higher slot does nothing more for this spell)' : '') : null,
     s.atk ? effectsNote({ kind: 'attack', ability: sc.ability }) : null,
     concNote,
     chips.length ? h('div', { class: 'chips' }, chips) : null,
@@ -618,7 +723,8 @@ function diceView() {
     h('p', { class: 'hint' }, 'kh3 keeps the highest 3 dice, kl1 the lowest.'));
 }
 
-const VIEWS = { attack: attackView, spell: spellView, check: checkView, save: saveView, init: initView, dice: diceView };
+const VIEWS = { attack: attackView, spell: spellView, check: checkView, save: saveView, init: initView, dice: diceView,
+  rest: () => window.resources?.view() }; // rest.js: spell slots, class features, Hit Point Dice, rests
 
 function render() {
   for (const b of $('rollActions').children) b.classList.toggle('on', b.dataset.tab === state.tab);
@@ -649,8 +755,8 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty('--head',
 
 for (const b of $('rollActions').children) b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); });
 $('clearLog').addEventListener('click', () => $('rollLog').replaceChildren(h('li', { class: 'empty' }, 'Your rolls show up here. Roll as often as you like.')));
-document.addEventListener('character-change', render);
-document.addEventListener('effects-change', render);
+for (const ev of ['character-change', 'effects-change', 'resources-change', 'sheet-state-change']) document.addEventListener(ev, render);
+document.addEventListener('sheet-loaded', () => { state.vex = null; });
 // For other scripts, e.g. the Becoming Marble page's "Roll CON save"
 window.roller = {
   save(ability, title, purpose = null) {

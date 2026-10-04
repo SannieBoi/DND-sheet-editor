@@ -176,6 +176,30 @@ const pageCount = async blob => (await pdfjsLib.getDocument({ data: new Uint8Arr
   // zoom buttons
   btn('+', document.getElementById('zoombox')).click();
   ok(document.getElementById('zoomPct').textContent === '110%', 'zoom + → 110%');
+
+  // ---- An hour passes: every marbled part gains 1, shown first; then the spread save
+  btn('Killing Marble').click(); await wait(20);
+  window.marble.clearAll();
+  btn('An hour passes', mp()).click(); await wait(20);
+  ok(/nothing changes/.test(document.querySelector('.ask')?.textContent || ''), 'no marble: an hour changes nothing');
+  btn('OK', document.querySelector('.ask')).click(); await wait(10);
+  score('rightArm', 5); score('head', 4); score('leftLeg', 10);
+  btn('An hour passes', mp()).click(); await wait(20);
+  const q = document.querySelector('.ask')?.textContent || '';
+  ok(/Right arm 5 → 6/.test(q) && /Head 4 → 5/.test(q) && !/Left leg 10/.test(q), 'the question lists Right arm 5 → 6 and Head 4 → 5 (a full leg stays)');
+  ok(/Now: Head 5: Disadvantage on all rolls/.test(q), 'and what they reach: ' + q.match(/Now:[^.]*/)?.[0]);
+  ok(/Then spreading: Right arm \(DC 12\), Left leg \(DC 16\)/.test(q), 'and what spreads after the hour');
+  ok(val('rightArm') === 5, 'nothing changed before answering');
+  forced = [2];
+  btn('Apply and roll CON save', document.querySelector('.ask')).click(); await wait(20);
+  ok(val('rightArm') === 6 && val('head') === 5 && val('leftLeg') === 10, 'applied: right arm 6, head 5, left leg 10');
+  ok(last().querySelector('.rhead b').textContent === 'Marble spread: CON save' && verdict('rightArm')?.classList.contains('fail'), 'the CON save is rolled: right arm vs DC 12 failed');
+  btn('Apply?', verdict('rightArm')).click();
+  ok(val('torso') === 1, 'Apply: the torso gains 1');
+  window.sheet.undo(); await wait(10);
+  ok(val('torso') === 0 && val('rightArm') === 6, 'Undo takes back the spread first');
+  window.sheet.undo(); await wait(10);
+  ok(val('rightArm') === 5 && val('head') === 4, 'a second Undo takes back the hour');
 } catch (err) { log('ERROR', err.stack); }
 if (MODE === 'test') { const pre = document.createElement('pre'); pre.id = 'out'; pre.textContent = out.join('\n'); document.body.prepend(pre); }
 document.title = 'DONE';

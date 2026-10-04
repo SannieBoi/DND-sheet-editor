@@ -56,6 +56,28 @@ const pickSpell = (pickId, name) => [...W().querySelectorAll(`[data-pick="${pick
     'Text106.0': 'Magic Missile', 'Text106.1': 'Fireball', 'Text105.1': '3', 'Text107.1': 'Action', 'Text109.1': '150 ft', 'Check Box252.1': false,
     'Text106.2': 'Counterspell', 'Text107.2': 'Reaction', 'Text106.3': 'Fly', 'Check Box252.3': true, 'Check Box254.0.3': true,
     'Text54': /^Memorize Spell \(Wizard 5\): / });
+  btnIn(W(), 'Close').click();
+
+  // spell slots tick the sheet's own "expended" boxes
+  document.querySelector('#rollActions [data-tab="spell"]').click();
+  [...document.querySelectorAll('#rollPick .item')].find(b => b.textContent.startsWith('Fireball')).click();
+  btnIn(document.getElementById('rollPick'), 'Cast & roll').click(); await wait(20);
+  btnIn(document.querySelector('#rollLog .slot-line'), 'Use a level 3 slot').click(); await wait(10);
+  expect('a level 3 slot used: its first expended box is ticked', { 'Check Box234': true, 'Check Box235': false });
+  ok(resources.slotsLeft(3) === 1, 'one level 3 slot left');
+  // a Short Rest writes the spent Hit Point Dice into the sheet's box
+  resources.openRest('short'); await wait(20);
+  btnIn(document.getElementById('restwin'), 'Roll a d6').click(); await wait(10);
+  btnIn(document.getElementById('restwin'), 'Apply Short Rest').click(); await wait(20);
+  expect('Short Rest: 1 Hit Point Die spent, in its box', { 'Text18': '1', 'Text14': '28' });
+  btnIn(document.getElementById('restwin'), 'Close').click();
+  resources.openRest('long'); await wait(20);
+  btnIn(document.getElementById('restwin'), 'Apply Long Rest').click(); await wait(20);
+  expect('Long Rest: the slot box is cleared, no Hit Point Dice spent', { 'Check Box234': false, 'Text18': '0' });
+  btnIn(document.getElementById('restwin'), 'Close').click();
+  // Undo takes back the rests, the slot and the whole level up, one step at a time
+  for (let i = 0; i < 4; i++) sheet.undo();
+  expect('four Undos: back to Wizard 4 before the level up', { 'Text11': '4', 'Text16': '22', 'Text17': '4d6', 'Text19': '+2', 'Text106.1': '', 'Check Box234': false, 'Text18': '' });
 } catch (err) { log('ERROR', err.stack); }
 document.title = 'DONE';
 })();

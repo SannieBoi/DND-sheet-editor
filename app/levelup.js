@@ -443,20 +443,8 @@ const maxSpellLevel = () => {
   const s = tableRow(classLevel()).spells;
   return !s ? 0 : s.pact ? s.pact.slotLevel : s.slots.reduce((m, n, i) => n ? i + 1 : m, 0);
 };
-// Spell slots of a set of classes: one class uses its own table, two or more casters add up their caster levels
-// (half casters round up); Warlock Pact Magic slots are added on top at their level.
-function slotsFor(classes) {
-  const casters = classes.filter(c => D.classes[c.key].spellcasting && D.classes[c.key].spellcasting.type !== 'pact');
-  let slots = Array(9).fill(0);
-  if (casters.length === 1) slots = [...D.classes[casters[0].key].levels[casters[0].level - 1].spells.slots];
-  else if (casters.length > 1) {
-    const cl = sum(casters.map(c => D.classes[c.key].spellcasting.type === 'half' ? Math.ceil(c.level / 2) : c.level));
-    slots = [...D.rules.multiclass.slotsByCasterLevel[Math.min(20, cl) - 1]];
-  }
-  const w = classes.find(c => D.classes[c.key].spellcasting?.type === 'pact'), pact = w && D.classes[w.key].levels[w.level - 1].spells.pact;
-  if (pact) slots[pact.slotLevel - 1] += pact.slots;
-  return slots;
-}
+// Spell slots of a set of classes (script.js): multiclass caster levels add up, Pact Magic slots on top
+const slotsFor = window.calc.slotsFor;
 
 const known = () => new Set(C.spells.map(x => x.spell.name));
 // New cantrips / prepared spells / spellbook spells this level, spells that come prepared, and the slots before and after
@@ -842,9 +830,11 @@ function apply() {
   // what the note shows afterwards is fixed now: the character is a level higher once the writes are done
   const ctx = { max0: numIn(S.get(S.field('hpMax'))) }, done = { rows, level: charLevel(), title: `${cls().name} ${classLevel()}`, steps: steps() };
   L.applying = true;
-  for (const r of todo) {
-    try { r.apply(ctx); r.done = true; } catch (err) { console.error('Level up: could not apply', r.label, err); r.failed = true; }
-  }
+  S.transaction(`Level up (${done.title})`, () => { // one step for Undo
+    for (const r of todo) {
+      try { r.apply(ctx); r.done = true; } catch (err) { console.error('Level up: could not apply', r.label, err); r.failed = true; }
+    }
+  });
   L.applying = false;
   L.applied = done;
   L.stepId = 'review';
@@ -1043,31 +1033,9 @@ function openWindow() {
     h('nav', { class: 'lu-steps' }), h('div', { class: 'lu-body' }), h('div', { class: 'lu-foot' }));
   document.body.append(win);
   const w = Math.min(560, innerWidth - 24);
-  place((innerWidth - w) / 2, 70);
-  drag(win.querySelector('.lu-bar'));
+  window.draggable(win, win.querySelector('.lu-bar'))((innerWidth - w) / 2, 70); // dialog.js
   render();
 }
-
-// Keep at least the title bar on screen (offsets, not the bounding box: that one moves while the window pops in)
-function place(x, y) {
-  win.style.left = Math.max(120 - win.offsetWidth, Math.min(innerWidth - 120, x)) + 'px';
-  win.style.top = Math.max(0, Math.min(innerHeight - 44, y)) + 'px';
-}
-function drag(handle) {
-  handle.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.target.closest('button')) return;
-    const dx = e.clientX - win.offsetLeft, dy = e.clientY - win.offsetTop;
-    try { handle.setPointerCapture(e.pointerId); } catch { /* not a real pointer */ }
-    win.classList.add('dragging');
-    const move = ev => place(ev.clientX - dx, ev.clientY - dy);
-    const up = () => { win.classList.remove('dragging'); handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up); };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
-    e.preventDefault();
-  });
-}
-addEventListener('resize', () => { if (win) place(win.offsetLeft, win.offsetTop); });
 
 function close() { win?.remove(); win = null; L = null; }
 function cancel() {
