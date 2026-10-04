@@ -10,7 +10,8 @@
        'option' (options: [{ name, text, grants? }], swappable?) }
      grants = what changes on the sheet: { speed, saves, abilityScores + max, hpPerClassLevel, weapons, armor, languages,
        alwaysPrepared: [spell names], cantrips, jackOfAllTrades }
-   toolChoice: { count, from } (tools picked at level 1). multiclass: { requires: abilities needing 13+ (requiresAny: one of them is enough), hitDie, weapons, armor, skills, tools, text }
+   toolChoice: { count, from } (tools picked at level 1). startingEquipment: [{ items, gp }] = options A, B (C) of the
+   Starting Equipment row; an item is a text or { choose: [tool kinds], proficiency (the tool you are proficient with) }. multiclass: { requires: abilities needing 13+ (requiresAny: one of them is enough), hitDie, weapons, armor, skills, tools, text }
    subclass: { name, features, attackFeatures, spells: { classLevel: [always-prepared spells] } (Druid: by land type) }
    warlock.invocations / sorcerer.metamagic / sorcerer.fontOfMagic ([slot level, point cost, min Sorcerer level]) /
    druid.wildShapeForms ([Druid level, known forms, max CR, fly]) / wizard.spellbook ({ start, perLevel }).
@@ -28,6 +29,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Medium Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":"all"},
     tools: [],
+    startingEquipment: [{"items":["Greataxe","4 Handaxes","Explorer's Pack"],"gp":15},{"gp":75}],
     spellcasting: null,
     weaponMastery: {"eligible":"Simple or Martial Melee weapons","countByLevel":[2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],"swap":"after a Long Rest"},
     attackFeatures: [{"lvl":1,"name":"Rage","text":"Bonus Action to enter (not in Heavy armor). Uses per day = `rages` for your level (regain 1 on a Short Rest, all on a Long Rest). While raging: resistance to bludgeoning/piercing/slashing damage; add `rageDamage` to the damage of Strength-based attacks (weapon or unarmed); Advantage on Strength checks and saves; no spellcasting or concentration. Lasts until the end of your next turn; keep it going by attacking, forcing a save, or a Bonus Action; max 10 minutes."},{"lvl":2,"name":"Reckless Attack","text":"On your first attack roll each turn you can attack recklessly: Advantage on Strength-based attack rolls until the start of your next turn, but attack rolls against you also have Advantage."},{"lvl":5,"name":"Extra Attack","text":"2 attacks per Attack action."},{"lvl":9,"name":"Brutal Strike","text":"When you use Reckless Attack you may give up the Advantage on ONE Strength attack roll (it must not have Disadvantage). If that attack hits: +1d10 damage (same type) and one effect: Forceful Blow (push 15 ft, then move up to half your Speed toward it without Opportunity Attacks) or Hamstring Blow (target Speed -15 ft until the start of your next turn)."},{"lvl":13,"name":"Improved Brutal Strike","text":"Adds Staggering Blow (target has Disadvantage on its next save and can't make Opportunity Attacks until the start of your next turn) and Sundering Blow (the next attack roll by another creature against the target before your next turn gets +5)."},{"lvl":17,"name":"Improved Brutal Strike","text":"Brutal Strike extra damage becomes 2d10 and you can apply two different Brutal Strike effects."}],
@@ -90,6 +92,7 @@ DND.classes = {
     armorTraining: ["Light Armor"],
     weaponProficiency: {"simple":true,"martial":null},
     tools: [],
+    startingEquipment: [{"items":["Leather Armor","2 Daggers",{"choose":["Musical Instrument"]},"Entertainer's Pack"],"gp":19},{"gp":90}],
     toolChoice: {"count":3,"from":["Musical Instrument"]},
     spellcasting: {"ability":"CHA","type":"full"},
     weaponMastery: null,
@@ -146,6 +149,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Medium Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":null},
     tools: [],
+    startingEquipment: [{"items":["Chain Shirt","Shield","Mace","Holy Symbol","Priest's Pack"],"gp":7},{"gp":110}],
     spellcasting: {"ability":"WIS","type":"full"},
     weaponMastery: null,
     attackFeatures: [{"lvl":1,"name":"Divine Order","text":"Protector option: proficiency with Martial weapons and training with Heavy armor."},{"lvl":7,"name":"Blessed Strikes","text":"Choose one: Divine Strike (once per turn when you hit with a weapon attack roll, +1d8 Radiant or Necrotic damage) or Potent Spellcasting (add WIS modifier to Cleric cantrip damage)."},{"lvl":14,"name":"Improved Blessed Strikes","text":"Divine Strike becomes 2d8; Potent Spellcasting gains an extra benefit."}],
@@ -199,6 +203,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":null},
     tools: ["Herbalism Kit"],
+    startingEquipment: [{"items":["Leather Armor","Shield","Sickle","Druidic Focus (Quarterstaff)","Explorer's Pack","Herbalism Kit"],"gp":9},{"gp":50}],
     spellcasting: {"ability":"WIS","type":"full"},
     weaponMastery: null,
     attackFeatures: [{"lvl":1,"name":"Primal Order","text":"Warden option: proficiency with Martial weapons and training with Medium armor."},{"lvl":7,"name":"Elemental Fury","text":"Choose one: Potent Spellcasting (add WIS modifier to Druid cantrip damage) or Primal Strike (once per turn on a weapon or Wild Shape beast attack hit, +1d8 Cold, Fire, Lightning or Thunder damage)."},{"lvl":15,"name":"Improved Elemental Fury","text":"Primal Strike becomes 2d8 (Potent Spellcasting also improves)."}],
@@ -255,6 +260,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Medium Armor","Heavy Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":"all"},
     tools: [],
+    startingEquipment: [{"items":["Chain Mail","Greatsword","Flail","8 Javelins","Dungeoneer's Pack"],"gp":4},{"items":["Studded Leather Armor","Scimitar","Shortsword","Longbow","20 Arrows","Quiver","Dungeoneer's Pack"],"gp":11},{"gp":155}],
     spellcasting: null,
     weaponMastery: {"eligible":"Simple or Martial weapons","countByLevel":[3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6],"swap":"after a Long Rest"},
     attackFeatures: [{"lvl":1,"name":"Fighting Style","text":"Choose a Fighting Style feat (free rules: Archery, Defense, Great Weapon Fighting, Two Weapon Fighting; see feats.js). Can swap it when you gain a Fighter level."},{"lvl":2,"name":"Action Surge","text":"Take one additional action on your turn (not the Magic action), so effectively a second full set of attacks. Once per Short/Long Rest; twice from level 17 (still only once per turn)."},{"lvl":5,"name":"Extra Attack","text":"2 attacks per Attack action; 3 at level 11 (Two Extra Attacks); 4 at level 20 (Three Extra Attacks)."},{"lvl":9,"name":"Tactical Master","text":"When attacking with a weapon whose mastery you can use, you can swap its mastery property for Push, Sap or Slow for that attack."},{"lvl":13,"name":"Studied Attacks","text":"If you miss a creature with an attack roll, you have Advantage on your next attack roll against it before the end of your next turn."}],
@@ -317,6 +323,7 @@ DND.classes = {
     armorTraining: [],
     weaponProficiency: {"simple":true,"martial":"light"},
     tools: [],
+    startingEquipment: [{"items":["Spear","5 Daggers",{"choose":["Artisan's Tools","Musical Instrument"],"proficiency":true},"Explorer's Pack"],"gp":11},{"gp":50}],
     toolChoice: {"count":1,"from":["Artisan's Tools","Musical Instrument"]},
     spellcasting: null,
     weaponMastery: null,
@@ -382,6 +389,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Medium Armor","Heavy Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":"all"},
     tools: [],
+    startingEquipment: [{"items":["Chain Mail","Shield","Longsword","6 Javelins","Holy Symbol","Priest's Pack"],"gp":9},{"gp":150}],
     spellcasting: {"ability":"CHA","type":"half"},
     weaponMastery: {"eligible":"any weapon you are proficient with","countByLevel":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"swap":"after a Long Rest"},
     attackFeatures: [{"lvl":2,"name":"Paladin's Smite","text":"Divine Smite is always prepared and can be cast once per Long Rest without a spell slot. It is a Bonus Action spell cast right after you hit with a Melee weapon or Unarmed Strike: extra Radiant damage 2d8 (level 1 slot), +1d8 per slot level above 1st."},{"lvl":2,"name":"Fighting Style","text":"A Fighting Style feat, or Blessed Warrior (two Cleric cantrips)."},{"lvl":5,"name":"Extra Attack","text":"2 attacks per Attack action."},{"lvl":11,"name":"Radiant Strikes","text":"Every hit with a Melee weapon or Unarmed Strike deals an extra 1d8 Radiant damage."}],
@@ -441,6 +449,7 @@ DND.classes = {
     armorTraining: ["Light Armor","Medium Armor","Shields"],
     weaponProficiency: {"simple":true,"martial":"all"},
     tools: [],
+    startingEquipment: [{"items":["Studded Leather Armor","Scimitar","Shortsword","Longbow","20 Arrows","Quiver","Druidic Focus (sprig of mistletoe)","Explorer's Pack"],"gp":7},{"gp":150}],
     spellcasting: {"ability":"WIS","type":"half"},
     weaponMastery: {"eligible":"any weapon you are proficient with","countByLevel":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"swap":"after a Long Rest"},
     attackFeatures: [{"lvl":1,"name":"Favored Enemy","text":"Hunter's Mark is always prepared and can be cast free `favoredEnemies` times per Long Rest (2 at level 1, rising to 6). Hunter's Mark adds 1d6 Force damage to your hits on the marked creature."},{"lvl":2,"name":"Fighting Style","text":"A Fighting Style feat (see feats.js)."},{"lvl":5,"name":"Extra Attack","text":"2 attacks per Attack action."},{"lvl":17,"name":"Precise Hunter","text":"Advantage on attack rolls against the creature marked by your Hunter's Mark."},{"lvl":20,"name":"Foe Slayer","text":"Hunter's Mark damage die becomes d10."}],
@@ -500,6 +509,7 @@ DND.classes = {
     armorTraining: ["Light Armor"],
     weaponProficiency: {"simple":true,"martial":"finesse-or-light"},
     tools: ["Thieves' Tools"],
+    startingEquipment: [{"items":["Leather Armor","2 Daggers","Shortsword","Shortbow","20 Arrows","Quiver","Thieves' Tools","Burglar's Pack"],"gp":8},{"gp":100}],
     spellcasting: null,
     weaponMastery: {"eligible":"any weapon you are proficient with","countByLevel":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"swap":"after a Long Rest"},
     attackFeatures: [{"lvl":1,"name":"Sneak Attack","text":"Once per turn, extra damage = `sneakAttack` dice (1d6 at level 1, +1d6 every odd level) on a hit with a Finesse or Ranged weapon if you have Advantage on the roll, OR an ally (not Incapacitated) is within 5 ft of the target and you don't have Disadvantage. Same damage type as the weapon."},{"lvl":3,"name":"Steady Aim","text":"Bonus Action: Advantage on your next attack roll this turn. Only if you haven't moved this turn, and your Speed is 0 until the end of the turn."},{"lvl":5,"name":"Cunning Strike","text":"When you deal Sneak Attack damage you can give up Sneak Attack dice to add an effect (save DC = 8 + DEX modifier + Proficiency Bonus): Poison (cost 1d6, CON save or Poisoned 1 minute), Trip (cost 1d6, DEX save or Prone), Withdraw (cost 1d6, move up to half your Speed without Opportunity Attacks)."},{"lvl":11,"name":"Improved Cunning Strike","text":"Apply up to two Cunning Strike effects, paying the cost of each."},{"lvl":14,"name":"Devious Strikes","text":"New Cunning Strike options: Daze (cost 2d6), Knock Out (cost 6d6), Obscure (cost 3d6)."}],
@@ -562,6 +572,7 @@ DND.classes = {
     armorTraining: [],
     weaponProficiency: {"simple":true,"martial":null},
     tools: [],
+    startingEquipment: [{"items":["Spear","2 Daggers","Arcane Focus (crystal)","Dungeoneer's Pack"],"gp":28},{"gp":50}],
     spellcasting: {"ability":"CHA","type":"full"},
     weaponMastery: null,
     attackFeatures: [{"lvl":1,"name":"Innate Sorcery","text":"Bonus Action, 1 minute, 2 uses per Long Rest: your Sorcerer spell save DC is +1 and you have Advantage on attack rolls of Sorcerer spells you cast."}],
@@ -629,6 +640,7 @@ DND.classes = {
     armorTraining: ["Light Armor"],
     weaponProficiency: {"simple":true,"martial":null},
     tools: [],
+    startingEquipment: [{"items":["Leather Armor","Sickle","2 Daggers","Arcane Focus (orb)","Book (occult lore)","Scholar's Pack"],"gp":15},{"gp":100}],
     spellcasting: {"ability":"CHA","type":"pact"},
     weaponMastery: null,
     attackFeatures: [{"lvl":1,"name":"Eldritch Invocations","text":"Number known = `eldritchInvocations`. Attack-related options (e.g. adding CHA to cantrip damage, attacking with a pact weapon) are in the class text and NOT captured yet."}],
@@ -713,6 +725,7 @@ DND.classes = {
     armorTraining: [],
     weaponProficiency: {"simple":true,"martial":null},
     tools: [],
+    startingEquipment: [{"items":["2 Daggers","Arcane Focus (Quarterstaff)","Robe","Spellbook","Scholar's Pack"],"gp":5},{"gp":55}],
     spellcasting: {"ability":"INT","type":"full"},
     weaponMastery: null,
     attackFeatures: [],

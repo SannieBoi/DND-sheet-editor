@@ -28,6 +28,7 @@ FULL GUIDE
   - The official D&D 2024 character sheet from Wizards of the Coast. The tool recognises it and the status line at the
     top says so.
   - Other fillable sheets whose boxes have sensible names (e.g. "STR", "ClassLevel", "Wpn Name").
+- No sheet yet? Press "…or create a new sheet" under the drop area (see "Creating a new sheet" below).
 - Nothing is saved until you press "Download with changes". That gives you a new copy of the PDF with your edits.
   Open that copy next time to carry on where you left off.
 - While you have changes that aren't in a downloaded PDF yet, the Download button shows a gold dot, and closing the tab
@@ -50,9 +51,33 @@ FULL GUIDE
   with it. A level up, a rest, a spell slot, an effect you added or a marble score count as one step each.
 - Zoom with the slider on the right, or Ctrl + mouse wheel. Click the % button to go back to 100%.
 
+2b. CREATING A NEW SHEET ("…or create a new sheet" under the drop area)
+------------------------------
+A window you can drag walks you through a new character, step by step. Go back to any step with the tabs at the top;
+nothing is made until you press "Create sheet" at the end.
+1. Sheet: the classic sheet (2014, the 3-page one) or the official 2024 sheet. Both are the free fillable sheets from
+   Wizards of the Coast.
+2. Class, and the level to start at.
+3. Background: all 16 from the 2024 rules (the four from the free rules and the twelve from the Player's Handbook).
+   Pick the tool when it lets you choose one (Artisan's Tools, Gaming Set, Musical Instrument).
+4. Species: the ones with their rules come first; search for 160+ more (their traits are named only). Pick a lineage
+   (Elf, Tiefling, Dragonborn, Gnome, Goliath), the ability its spells use, and your size where you may choose.
+5. Ability scores: Standard array, Point buy (27 points), Roll 4d6 (drop the lowest; roll again as often as you like)
+   or type them. The numbers start where your class wants them; pick another value and the two swap. Then your
+   background's increase: +2 and +1, or +1 to all three.
+6. Equipment: your class's and your background's packages (A, B ...) or their gold. It shows your Armor Class, gold
+   and which weapons get attack lines. Starting above level 1 you can add the extra money from the rules (your DM's call).
+7. Details: name, alignment, XP, two languages besides Common, appearance and personality (all optional).
+8. Review, then "Create sheet": the blank sheet opens, filled in (scores, modifiers, saves, skills, AC, speed,
+   equipment, gold, attack lines, languages ...). Then the Level 1 window opens for your class's skills, its level 1
+   features, your Origin feat's choices, species traits, spells and Hit Points. Apply it, and if you start higher, a
+   "Level 2 of 5 →" button takes you to the next Level up, until your starting level.
+Download the PDF afterwards to keep it. Press F5 to start over with an empty page.
+
 3. LEVEL UP (gold button in the header)
 ------------------------------
 It asks if you're sure, then opens a window you can drag around by its title bar, so you can still see the sheet.
+(A sheet without a class yet: it offers to start a level 1 character instead, with all of the class's proficiencies.)
 1. Class: level up a class you have, or pick a new one (multiclassing). If you don't meet the 13+ requirement it warns
    you but still lets you (your DM may allow it).
 2. Hit Points: the fixed value for your Hit Die is picked; press Roll to roll instead (as often as you like). Your

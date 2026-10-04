@@ -21,6 +21,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | lib/pdf.min.js, lib/pdf.worker.min.js (pdf.js 3.11.174), lib/pdf-lib.min.js | render PDF / write PDF. Never edit. |
 | data/ rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
 | data/feats-more.js, data/species-more.js | push onto `DND.feats` / `DND.species` (load right after feats.js / species.js): the rest of the 2024 PHB (58 feats, Aasimar) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public lists; "see the book"): feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light; and EVERY species on D&D Beyond's species list (user asked for all, no duplicates; official + third-party). 140 feats, 172 species. Species dedupe rule is in the comment above `listed` (2024 > newest official > third-party; MotM-replaced names dropped; 2014 ability bonuses stripped from trait names). New fields documented in their headers (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
+| data/backgrounds-more.js | pushes the other 12 PHB (2024) backgrounds onto `DND.backgrounds` (load right after backgrounds.js), sorted by name; `source`. Feats/skills checked against D&D Beyond's public list; ability scores, tools, equipment from the PHB (paywalled). |
+| data/creation.js | `DND.creation`: standard array (+ by class), point buy, languages (standard/rare), alignments, equipment packs' contents, tool kinds (Artisan's Tools, Musical Instrument, Gaming Set), starting at higher levels. Checked against the Basic Rules 2026-10-04. Classes have `startingEquipment`, backgrounds `equipment` (options A/B(/C): `{ items, gp }`; item = text, `{ choose: [kinds], proficiency }` or `{ same: true }` = the background's tool). |
+| data/sheet-2014.js, data/sheet-2024.js | the blank classic (2014, 3 pages) and official 2024 sheets as base64 (`window.BLANK_SHEETS.classic / .official2024`), loaded by maker.js with a script tag only when needed (file:// can't fetch). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
 | app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests; `.lu` styles). |
@@ -29,11 +32,12 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
 | app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
 | app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations. |
-| app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. See "Level up" below. |
+| app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. Also a new character's level 1 (`L.first`). See "Level up" below. |
+| app/maker.js | the sheet maker: "…or create a new sheet" (#newSheet, under the drop area) -> New character window (Sheet / Class / Background / Species / Abilities / Equipment / Details / Review) -> opens a blank sheet, writes it, then `levelUp.start({ key, target, picks })`. See "Sheet maker" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (353 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (400 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -44,7 +48,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - `window.sheet` (script.js, for levelup.js / rest.js / marble.js) = `{ map (the sheets.js entry or null), loaded, field(key) -> PDF field name, get(name),
   set(name, value) (writes + refreshCharacter; checkboxes take true/false), profBox(key) ('skill:X'/'save:AB' checkbox),
   multiline(name), spellLines() -> [{field, level (0 = cantrips, null = any), row (official sheet: level/time/range/notes/conc/ritual/material)}],
-  writeSpell(line, spell), spellNamed(text), transaction(label, fn) (one Undo step for every write + sheetState change in fn), undo(), redo() }`.
+  writeSpell(line, spell), spellNamed(text), transaction(label, fn) (one Undo step for every write + sheetState change in fn), undo(), redo(),
+  setMany([[field, value]...]) (writes all, then one refresh), weaponRows() }`. `window.openPdf(file)` opens a PDF (resolves when loaded).
+- `window.levelUp.start({ key, target, picks })` (levelup.js), `window.maker = { open, state }` (maker.js).
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
   `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages,
   concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
@@ -67,7 +73,9 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   roller.js `log()` returns the entry's element; `castSpell()` returns it too (cast() adds the concentration line).
 
 ## How the core works (script.js)
-- Fields: `FIELD_MAP` aliases matched by `norm()` (lowercase alnum). Skills `skill:<Name>`, saves `save:<AB>` added from data,
+- Fields: `FIELD_MAP` aliases matched by `norm()` (lowercase alnum). Classic-sheet extras: playerName, name2 (page 2), age/height/weight/eyes/skin/hair,
+  personality/ideals/bonds/flaws, allies, backstory, treasure, spellClass ("Spellcasting Class 2"), slotsExpended1-9
+  ("SlotsRemaining 19-27"), and featsText = "Feat+Traits" (Additional Features & Traits, page 2: level up writes feats there). Skills `skill:<Name>`, saves `save:<AB>` added from data,
   slot totals `slots1..9` ("SlotsTotal 19" = level 1 on the classic sheet), plus `hitDiceTotal` (HDTotal) and `subclass`.
   A PDF matching a `DND.sheets[].detect` uses that map instead (`sheetMap`): fields, saves, skills, slots, profChecks
   (pre-filled into `profBoxes`), weapons (rows), spellRows. Keys holding text that may start with a digit go in `TEXT_KEYS`.
@@ -116,7 +124,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - What each data file holds: weapons.js DND.weapons (38), weaponProperties, masteryProperties, ammunition, attackItems, coins;
   armor.js DND.armor (12), shield, armorRules; classes.js DND.classes.{barbarian..wizard} (hit die, saves, proficiencies,
   weaponMastery, levels[0..19], attackFeatures, subclass); feats.js DND.feats (17); species.js DND.species (9, lineages,
-  attackNotes); backgrounds.js DND.backgrounds (4); rules.js abilities, skills, PB by level, damage types, attack/damage
+  attackNotes); backgrounds.js DND.backgrounds (4 SRD + 12 PHB from backgrounds-more.js); rules.js abilities, skills, PB by level, damage types, attack/damage
   formulas, unarmed strike, cantrip scaling; spells.js DND.spells (roll data keys documented in its header comment).
   Example: `DND.classes.fighter.levels[4]` = level 5 (`attacks === 2`, `weaponMastery === 4`).
 - Weapons/armor were transcribed from the D&D Beyond Basic Rules Equipment chapter. The SRD JSON data we compared it with
@@ -132,7 +140,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - Feats on the sheet: `findFeats` (script.js) skips text that holds a feat's name without being it: longer feat names
   ("Great Weapon Master" is not "Weapon Master", "Greater Mark of X" not "Mark of X") and the feat's `unless`
   ("Blessed Healer", "Healer's Kit", "Protection from", "Poisoner's Kit", "Speedy Recovery", "Unarmored Defense"). Species match by name or `aliases`; the longest match wins.
-- Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. Nothing from the full PHB.
+- Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. The PHB adds feats, the Aasimar and 12 backgrounds.
 
 ## Rules decisions (keep consistent)
 - 2024 rules. Adv + Dis cancel. Crits double dice only. Nat 1 attack = miss, no damage. Checks/saves never crit.
@@ -210,7 +218,33 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Advantage (withEffects `more`), shown on cards with "Drop it"; Cleave: button rolls a second attack ("X (Cleave)") whose
   first damage part loses a positive ability modifier.
 
+## Sheet maker (maker.js) — decisions
+- User's choices (2026-10-04): offer the classic 2014 sheet (like their Arxen sheet) and the official 2024 sheet (our own
+  design later, not a priority); build level 1, then Level up per level up to the starting level; 2024 starting
+  equipment packages in the data; all 16 PHB backgrounds.
+- The maker only does what needs no feat/feature pickers; everything with pickers is Level up's first-level mode, so both
+  share one engine. Maker steps write (one `sheet.transaction('New character')`): identity, scores (classic: the MODIFIER
+  goes in the big box named "STR" and the score in the oval "STRmod", as on the user's sheet; sortAbilities then swaps
+  fieldOf), background name + its skill ticks, species "Elf (High Elf)", size, speed (+5 Wood Elf), AC (armor + DEX cap,
+  Shield, Barbarian/Monk Unarmored Defense), equipment (packs expanded), gold, languages (+ background tool: official
+  boxes, else classic Proficiencies box), details (classic boxes; official Appearance / Backstory & Personality boxes),
+  attack lines (weapons found in the items, as many as the sheet's rows), and fills every save/skill/Initiative/Passive box
+  still empty (a +0 doesn't propagate on a blank sheet). XP = the minimum for the starting level unless typed.
+- Hands over `picks`: `'sp:<lineage feature>'` = { name, ability } (default ability = the class's casting ability),
+  `'mc:tools'` = the Monk's tool chosen in the equipment step.
+- Standard array starts as "Standard Array by Class"; picking a value swaps it with the ability that had it; rolls are
+  placed by the class's priority; point buy starts from the class array (exactly 27). Background bonus defaults: +2/+1 to
+  the class's top-priority abilities among the background's three.
+- Brief species: allowed, with a warning (no size/speed/traits rules). No "Other background".
+- The button lives in #pages, so it disappears once a sheet is open (F5 to make another).
+
 ## Level up (levelup.js) — decisions
+- New character's level 1 (`L.first`: no class on the sheet; `start(opts)` from the maker, or the header button on a
+  classless sheet): full class proficiencies (saves, armor, weapons, tools + `toolChoice` via 'mc:tools', skills via
+  'mc:sk' with the class's count), HP = Hit Die max + CON (no roll), Max/Current HP and both Hit Dice boxes written, PB box
+  filled, Class box "Cleric 1" (official: "Cleric" + Level box), spellcasting class box, the background's Origin feat as
+  a feature ('origin', preselected), species level-1 traits incl. 'lineage' choices (lineagePick). `fixedClass` hides the
+  Class step. `target`: after Apply a "Level N of T →" button starts the next Level up directly (and "Stop here").
 - Button asks first (confirm box), then the window. It is not modal and can be dragged by its title bar (`window.draggable`
   in dialog.js keeps the bar on screen; uses offsetLeft/Top, not the bounding box, which moves during the pop-in animation).
   Apply runs inside `sheet.transaction`, so one Ctrl+Z takes the whole level up back.
@@ -261,6 +295,10 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   heal.test.js: Life Domain healing. feats.test.js: feat/species data counts, reading feats/species off a sheet (incl.
   look-alike text), roller feats (GWM, Dueling, Piercer crit, Tavern Brawler, Elemental Adept, War Caster), level-up feats
   (prerequisites, search, Tough HP, Resilient, Speedy, Fey Touched spells, an `unsure` feat).
+- maker.test.js: the button, both sheets with pictures, an Elf Cleric on the classic sheet (array swap, equipment/AC,
+  details, every box written, Level 1 with skills, Divine Order, Magic Initiate (Wizard), lineage ability, spells) and a
+  Human Monk 3 on the official sheet (PHB background + tool, size, point buy, 4d6 rolls, Monk tool -> 'mc:tools',
+  Versatile feat, the Level 2 / Level 3 chain).
 - levelup.test.js: named sheets (ASI, Dwarf HP, mastery, rolled HP, Wizard spells/slots/swap, multiclass Wizard and Rogue,
   cancel) + a synthetic official sheet. sweep.test.js: every class 1 -> 20 and multiclassing into every class, apply, no errors.
 - Headless virtual time races ahead while the browser waits for real work (reading a dropped file, pdf.js): waiting with
@@ -295,5 +333,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   rests (1 / 8 hours) is the user's call; for now rests leave the marble alone.
 - Rests/resources not done: species uses (Breath Weapon, Adrenaline Rush ...), subclass uses (Wholeness of Body, Natural
   Recovery), Second Wind / Lay On Hands rolls from the counters, Magical Cunning's slot recovery, Relentless Rage DC.
+- Sheet maker, not done: our own sheet design (user: later); "Other background"; brief species' size/speed; Bard's three
+  instruments aren't tied to the equipment instrument; starting magic items for higher levels are a note only.
 - Ideas suggested to the user and not built yet: Damage/Heal/Temp HP buttons, death saves roller, Heroic Inspiration and
   Lucky rerolls in the log, copy a roll as text, roller keyboard shortcuts, asking before loading another PDF over unsaved changes.

@@ -39,7 +39,8 @@
 <!-- Conditions and other debuffs (filled in by effects.js) -->
 <aside id="effects" aria-label="Effects"></aside>
 
-<main id="pages"><div id="drop">Drop your character sheet PDF here</div></main>
+<main id="pages"><div id="drop">Drop your character sheet PDF here</div>
+  <button id="newSheet" class="btn newsheet" title="Make a new character step by step on a blank sheet">…or create a new sheet</button></main>
 
 <!-- Dice roller (filled in by roller.js) -->
 <aside id="roller" aria-label="Dice roller">
@@ -72,8 +73,11 @@
 <script src="data/species.js"></script>
 <script src="data/species-more.js"></script>
 <script src="data/backgrounds.js"></script>
+<script src="data/backgrounds-more.js"></script>
+<script src="data/creation.js"></script>
 <script src="data/spells.js"></script>
 <script src="data/sheets.js"></script>
+<!-- data/sheet-2014.js and data/sheet-2024.js (the blank sheets) are loaded by the sheet maker when it opens -->
 <script src="app/script.js"></script>
 <script src="app/dialog.js"></script>
 <script src="app/effects.js"></script>
@@ -82,5 +86,6 @@
 <script src="app/rest.js"></script>
 <script src="app/roller.js"></script>
 <script src="app/levelup.js"></script>
+<script src="app/maker.js"></script>
 </body>
 </html>

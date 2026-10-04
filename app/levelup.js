@@ -114,6 +114,10 @@ function gains() {
     out.push({ id: `ei${lvl}`, name: 'Eldritch Invocations', src, kind: 'feature', choice: { type: 'invocations' },
       text: `You learn ${plural(more('eldritchInvocations'), 'more invocation')}.` });
   }
+  // a new character's level 1: the Origin feat of the background (preselected, see start())
+  const bg = L.first && C.backgroundData;
+  if (bg?.feat) out.push({ id: 'origin', name: 'Origin feat', src: `${bg.name} background`, kind: 'feature', choice: { type: 'feat', category: 'origin' },
+    text: `Your background gives you an Origin feat: ${bg.feat}.` });
   const sp = C.speciesData, lv = charLevel();
   for (const f of sp?.features || []) if (f.lvl === lv) out.push({ ...f, id: `sp:${f.name}`, src: sp.name, kind: 'species' });
   return out;
@@ -377,10 +381,23 @@ function choiceUI(f) {
     case 'spells': return spells(ch.levels || range(0, maxSpellLevel()), (ch.lists || [L.key]).map(cap), null);
     case 'spellbook': return spells(range(1, ch.maxLevel || maxSpellLevel()), ['Wizard'], ch.school);
     case 'option': return onePick(() => L.picks[f.id], v => { L.picks[f.id] = v; }, ch.options);
+    case 'lineage': return lineagePick(f);
   }
   return null;
 }
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
+
+// A species' lineage (Elven Lineage, Fiendish Legacy ...): the one named in the Species box, else picked here; some ask
+// which ability their spells use. pick = { name, ability }
+const lineages = () => (C.speciesData?.subspecies || []).map(s => s.name.split(': ').pop());
+function lineagePick(f) {
+  const ch = f.choice, list = lineages(), p = L.picks[f.id] ||= { name: C.lineage?.name.split(': ').pop() || '', ability: null };
+  if (ch.ability && !p.ability) p.ability = ch.ability.find(ab => ab === C.spellcasting?.ability) || ch.ability[0];
+  return [C.lineage ? h('p', { class: 'lu-note' }, `${p.name}, from the Species box.`)
+    : h('div', { class: 'lu-opts' }, list.map(n => h('button', { class: 'lu-opt' + (p.name === n ? ' on' : ''), onclick: () => { p.name = n; render(); } }, h('b', {}, n)))),
+  ch.ability ? h('div', { class: 'lu-pick' }, pickHead('Spellcasting ability for these spells'),
+    h('div', { class: 'chips' }, ch.ability.map(ab => h('button', { class: 'chip' + (p.ability === ab ? ' on' : ''), onclick: () => { p.ability = ab; render(); } }, ab)))) : null];
+}
 
 // What a feature's pick says, for the sheet and the review ("Archery", "STR +2", "Longsword, Greatsword")
 function pickText(f) {
@@ -398,6 +415,7 @@ function pickText(f) {
       return p.name + (bits.length ? ': ' + bits.join('; ') : '');
     }
     case 'option': return p || '';
+    case 'lineage': return p?.name ? p.name + (p.ability ? ` (spellcasting ability: ${p.ability})` : '') : '';
     case 'expertise': return [names(f.id), names(f.id + ':lang')].filter(Boolean).join('; ');
     default: return names(f.id);
   }
@@ -550,7 +568,15 @@ function collect() {
       if (feat?.choice?.type === 'allSkills') out.skills.push(...SKILLS.filter(x => !profLevel('skill:' + x.name, x.ability)).map(x => x.name));
     }
   }
-  if (L.isNew) {
+  if (L.first) { // a new character's first class: all of its proficiencies
+    const c = cls(), wp = c.weaponProficiency;
+    out.saves.push(...c.saves);
+    out.armor.push(...(c.armorTraining || []).map(a => a.replace(/ Armor$/, '')));
+    out.weapons.push(...[wp.simple && 'Simple weapons', wp.martial === 'all' && 'Martial weapons',
+      wp.martial === 'light' && 'Martial weapons with the Light property', wp.martial === 'finesse-or-light' && 'Martial weapons with the Finesse or Light property'].filter(Boolean));
+    out.skills.push(...L.picks['mc:sk'] || []);
+    out.tools.push(...c.tools || [], ...(L.picks['mc:tools'] || []).filter(textOf));
+  } else if (L.isNew) {
     const m = cls().multiclass;
     out.weapons.push(...m.weapons || []);
     out.armor.push(...m.armor || []);
@@ -569,10 +595,11 @@ function finalScores(out) {
   return res;
 }
 
-// Hit Points: the fixed value (or the roll) + CON modifier, at least 1, plus Dwarven Toughness / Draconic Resilience
+// Hit Points: the fixed value (or the roll) + CON modifier, at least 1, plus Dwarven Toughness / Draconic Resilience.
+// A new character's level 1: the highest number on the Hit Die + CON modifier.
 function hpGain() {
-  const die = cls().hitDie, con = C.mods.CON ?? 0, rolled = L.hp.mode === 'roll' && L.hp.roll != null;
-  const base = rolled ? L.hp.roll : D.rules.hitPoints.fixedByDie[die], extras = [];
+  const die = cls().hitDie, con = C.mods.CON ?? 0, rolled = !L.first && L.hp.mode === 'roll' && L.hp.roll != null;
+  const base = L.first ? die : rolled ? L.hp.roll : D.rules.hitPoints.fixedByDie[die], extras = [];
   for (const f of C.speciesData?.features || []) if (f.grants?.hpPerLevel) extras.push([f.name, f.grants.hpPerLevel]);
   for (const n of C.feats) { const g = D.feats.find(x => x.name === n)?.grants; if (g?.hpPerLevel) extras.push([n, g.hpPerLevel]); }
   for (const f of gains()) { // a feat taken now: Tough counts every level so far, Boon of Fortitude adds 40
@@ -611,6 +638,7 @@ function classTextAfter(subName) {
   const text = textOf(C.classLevel), parts = text.split(/([/,;&+]|\band\b)/i), c = cls();
   const partOf = key => parts.findIndex((p, i) => i % 2 === 0 && new RegExp(`\\b${key}\\b`, 'i').test(p));
   const tag = subName && !S.field('subclass') ? ` (${subName})` : '';
+  if (L.first) return S.field('level') ? c.name : `${c.name} 1`; // a level box of its own holds the level
   if (L.isNew) {
     const numbered = C.classes.every(x => partOf(x.key) >= 0 && /\d/.test(parts[partOf(x.key)]));
     return `${numbered ? text : C.classes.map(x => `${x.name} ${x.level}`).join(' / ')} / ${c.name} 1${tag}`;
@@ -668,6 +696,8 @@ function changes() {
   }
   if (pbAt(lv) !== pbAt(lv - 1)) add('Level', 13, { label: 'Proficiency Bonus', from: fmt(pbAt(lv - 1)), to: fmt(pbAt(lv)),
     note: 'Comes with the new level: proficient skills, saves, attacks and spell DC on the sheet move with it.' });
+  if (L.first && F('profBonus') && numIn(S.get(F('profBonus'))) == null) add('Level', 13, { id: 'pb', label: 'Proficiency Bonus', from: '—', to: fmt(pbAt(1)),
+    apply: () => S.set(F('profBonus'), fmt(pbAt(1))) });
   const xp = numIn(C.xp), need = D.rules.xpByLevel[lv - 1];
   if (xp != null && xp < need) add('Level', 14, { label: 'Experience', note: `${xp.toLocaleString()} XP; level ${lv} normally needs ${need.toLocaleString()} (fine if your DM uses milestones).` });
 
@@ -675,7 +705,11 @@ function changes() {
   const hp = hpGain(), scores = finalScores(out), con0 = score('CON'), conUp = con0 != null ? (modOf(scores.CON) - modOf(con0)) * lv : 0;
   const max0 = numIn(C.hpMax), hpNote = [`${hp.rolled ? 'rolled' : 'fixed'} ${hp.base} on the d${hp.die}`, `CON ${fmt(hp.con)}`,
     ...hp.extras.map(([n, v]) => `${n} +${v}`)].join(', ') + (conUp ? `; CON modifier ${fmt(conUp / lv)} adds ${conUp} more (1 per level)` : '');
-  if (F('hpMax') && max0 != null) {
+  if (L.first && F('hpMax') && max0 == null) { // a new character: Max HP and Current HP start here
+    add('Hit Points', 20, { id: 'hpMax', label: 'Max HP', from: '—', to: hp.total, note: hpNote.replace(/^fixed (\d+)/, 'the highest roll, $1,'),
+      apply: () => S.set(F('hpMax'), String(hp.total)) });
+    if (F('hp')) add('Hit Points', 60, { id: 'hp', label: 'Current HP', from: textOf(C.hp) || '—', to: hp.total, apply: () => S.set(F('hp'), String(hp.total)) });
+  } else if (F('hpMax') && max0 != null) {
     add('Hit Points', 20, { id: 'hpMax', label: 'Max HP', from: max0, to: max0 + hp.total + conUp, note: `+${hp.total}: ${hpNote}`,
       apply: () => S.set(F('hpMax'), String(numIn(S.get(F('hpMax'))) + hp.total)) });
   } else add('Hit Points', 20, { label: `Max HP +${hp.total + conUp}`, note: `${hpNote}. ${F('hpMax') ? 'The Max HP box is empty' : 'No Max HP box found'}: add it yourself.` });
@@ -686,7 +720,7 @@ function changes() {
   }
   const diceKeys = ['hitDiceTotal', 'hitDice'].filter(F);
   diceKeys.forEach((key, i) => {
-    const cur = textOf(C[key]), to = cur ? bumpDice(cur, hp.die) : i === 0 ? diceOf(newClasses()) : null;
+    const cur = textOf(C[key]), to = cur ? bumpDice(cur, hp.die) : i === 0 || L.first ? diceOf(newClasses()) : null;
     const label = diceKeys.length > 1 ? (key === 'hitDice' ? 'Hit Dice (current)' : 'Hit Dice (total)') : 'Hit Dice';
     if (to) add('Hit Points', 25, { id: key, label, from: cur || '—', to, apply: () => S.set(F(key), to) });
     else if (cur) add('Hit Points', 25, { label, note: `Add one d${hp.die} to "${cur}" yourself.` });
@@ -773,8 +807,8 @@ function changes() {
   });
   if (c.spellcasting && !C.classes.some(x => D.classes[x.key].spellcasting)) { // first spellcasting class: fill the empty spellcasting boxes
     const ab = c.spellcasting.ability, pb = pbAt(lv), m = modOf(scores[ab] ?? 10);
-    for (const [key, v] of [['spellAbility', D.rules.abilities[ab]], ['spellMod', fmt(m)], ['spellDC', String(8 + m + pb)], ['spellAttack', fmt(m + pb)]]) {
-      if (F(key) && !textOf(C[key])) add('Spells', 86, { id: key, label: { spellAbility: 'Spellcasting ability', spellMod: 'Spellcasting modifier', spellDC: 'Spell save DC', spellAttack: 'Spell attack bonus' }[key],
+    for (const [key, v] of [['spellClass', c.name], ['spellAbility', D.rules.abilities[ab]], ['spellMod', fmt(m)], ['spellDC', String(8 + m + pb)], ['spellAttack', fmt(m + pb)]]) {
+      if (F(key) && !textOf(C[key])) add('Spells', 86, { id: key, label: { spellClass: 'Spellcasting class', spellAbility: 'Spellcasting ability', spellMod: 'Spellcasting modifier', spellDC: 'Spell save DC', spellAttack: 'Spell attack bonus' }[key],
         to: v, apply: () => S.set(F(key), v) });
     }
   }
@@ -790,7 +824,7 @@ function changes() {
     else add('Features', 90, t ? { id: 'f:' + f.id, label: f.name, src: f.src, note, more, apply: () => appendText(t, line), where: targetName(kind) }
       : { label: f.name, src: f.src, note: note + '. No Features box found: note it yourself.', more });
   }
-  if (L.isNew) add('Features', 89, { label: `${c.name} multiclass`, note: c.multiclass.text });
+  if (L.isNew && !L.first) add('Features', 89, { label: `${c.name} multiclass`, note: c.multiclass.text });
   for (const n of numbers()) add('Class numbers', 99, n);
   if ([5, 11, 17].includes(lv) && C.spells.some(x => x.spell.level === 0 && x.spell.dmg)) {
     add('Class numbers', 99, { label: 'Damage cantrips', from: `${[1, 5, 11, 17].indexOf(lv)} dice`, to: `${[1, 5, 11, 17].indexOf(lv) + 1} dice`,
@@ -802,7 +836,11 @@ function changes() {
     const m = missing(f), n = f.choice && ['feat', 'option', 'subclass'].includes(f.choice.type) ? 1 : f.choice ? countOf(f) : 0;
     if (m) todo(f.name, n, n - m, 'Features');
   }
-  if (L.isNew) {
+  if (L.first) {
+    const sk = (L.picks['mc:sk'] || []).length, tl = (L.picks['mc:tools'] || []).filter(textOf).length, tc = c.toolChoice;
+    if (sk < c.skills.choose) todo(`${c.name} skills`, c.skills.choose, sk, 'Features');
+    if (tc && tl < tc.count) todo(`${c.name} ${tc.from.join(' or ')}`, tc.count, tl, 'Features');
+  } else if (L.isNew) {
     const m = c.multiclass, sk = (L.picks['mc:sk'] || []).length, tl = (L.picks['mc:tools'] || []).filter(textOf).length;
     if (m.skills && sk < m.skills.count) todo('Multiclass skill', m.skills.count, sk, 'Features');
     if (m.tools?.count && tl < m.tools.count) todo(`Multiclass ${m.tools.from}`, m.tools.count, tl, 'Features');
@@ -843,7 +881,7 @@ function apply() {
 
 // ---- Steps ------------------------------------------------------------------------------------
 const STEPS = [
-  { id: 'class', name: 'Class', show: () => true, view: classStep },
+  { id: 'class', name: 'Class', show: () => !L.fixedClass, view: classStep },
   { id: 'hp', name: 'Hit Points', show: () => true, view: hpStep },
   { id: 'features', name: 'Features', show: () => true, view: featuresStep },
   { id: 'spells', name: 'Spells', show: () => spellPlan().any, view: spellsStep },
@@ -858,6 +896,12 @@ function classStep() {
     return `d${c.hitDie} Hit Die · ${names.length ? names.join(', ') : 'no new features'}`;
   };
   const others = Object.keys(D.classes).filter(k => !C.classes.some(c => c.key === k));
+  if (L.first) { // a new character: any class, level 1
+    return [h('p', { class: 'lu-lead' }, `Which class does ${who()} start with?`),
+      h('div', { class: 'lu-cards compact' }, others.map(k => h('button', { class: 'lu-card' + (L.key === k ? ' on' : ''),
+        onclick: () => { if (L.key !== k) { Object.assign(L, { key: k, picks: {}, spells: {}, ui: {} }); presetFirst(); } render(); } },
+      h('b', {}, D.classes[k].name), h('span', {}, `${D.classes[k].primaryAbility} · ${preview(k, 1)}`))))];
+  }
   const mc = L.isNew ? missingFor(L.key) : [];
   return [
     h('p', { class: 'lu-lead' }, `${who()} is level ${total()} (${C.classes.map(c => `${c.name} ${c.level}`).join(' / ')}). Which class gets level ${charLevel()}?`),
@@ -883,6 +927,14 @@ function hpStep() {
     render();
   };
   const max0 = numIn(C.hpMax), hp0 = numIn(C.hp), cur = textOf(C.hitDiceTotal) || textOf(C.hitDice);
+  if (L.first) { // level 1: no roll, the Hit Die's highest number
+    return [h('p', { class: 'lu-lead' }, `${cls().name} Hit Die: d${g.die}. At level 1 you get its highest number, ${g.die}, plus your Constitution modifier.`),
+      h('div', { class: 'lu-sum' }, h('span', {}, `d${g.die}: ${g.die}`), h('span', {}, `CON ${fmt(g.con)}`), g.base + g.con < 1 ? h('span', {}, 'at least 1') : null,
+        g.extras.map(([n, v]) => h('span', {}, `${n} +${v}`)), h('b', {}, `= ${g.total} HP`)),
+      h('div', { class: 'nums' }, h('div', { class: 'num' }, h('small', {}, 'Max HP'), h('b', {}, g.total)),
+        h('div', { class: 'num' }, h('small', {}, 'Hit Dice'), h('b', {}, diceOf(newClasses())))),
+      L.target > 1 ? h('p', { class: 'lu-note' }, `Levels 2 to ${L.target} come next, one Level up at a time; there you can roll for HP.`) : null];
+  }
   return [
     h('p', { class: 'lu-lead' }, `${cls().name} Hit Die: d${g.die}. Take the fixed value or roll for it.`),
     h('div', { class: 'lu-hp' },
@@ -908,7 +960,15 @@ function hpStep() {
 function featuresStep() {
   const list = gains(), nums = numbers(), sub = subclass();
   const cards = [];
-  if (L.isNew) {
+  if (L.first) { // a new character: the class's proficiencies, with its skill (and tool) choices
+    const c = cls(), wp = c.weaponProficiency, tc = c.toolChoice;
+    const weapons = ['Simple', wp.martial === 'all' ? 'Martial' : wp.martial === 'light' ? 'Martial (Light)' : wp.martial === 'finesse-or-light' ? 'Martial (Finesse or Light)' : null].filter(Boolean);
+    cards.push(h('section', { class: 'lu-feat choice' + (missingFirst() ? ' todo' : '') }, h('div', { class: 'lu-fh' }, h('b', {}, `${c.name} proficiencies`), h('small', {}, c.name + ' 1')),
+      h('p', {}, `Saving throws: ${c.saves.map(ab => D.rules.abilities[ab]).join(' and ')}. Armor: ${(c.armorTraining || []).join(', ') || 'none'}. ` +
+        `Weapons: ${weapons.join(', ')}.${(c.tools || []).length ? ` Tools: ${c.tools.join(', ')}.` : ''}`),
+      skillPick('mc:sk', c.skills.choose, c.skills.from, `${c.name} skills`),
+      tc ? textsPick('mc:tools', tc.count, tc.from.join(' or '), `${tc.from.join(' or ')}, e.g. ${(D.creation?.toolKinds?.[tc.from[0]] || ['Lute'])[0]}`) : null));
+  } else if (L.isNew) {
     const m = cls().multiclass;
     cards.push(h('section', { class: 'lu-feat' }, h('div', { class: 'lu-fh' }, h('b', {}, 'Multiclass proficiencies'), h('small', {}, cls().name + ' 1')),
       h('p', {}, m.text),
@@ -1004,8 +1064,13 @@ function render() {
   body.scrollTop = keep;
   L.shown = L.stepId;
   const last = i === list.length - 1, go = d => { L.stepId = list[i + d].id; render(); };
+  win.querySelector('.lu-title b').textContent = L.first ? 'Level 1' : 'Level up';
+  // a new character on its way to its starting level: the next Level up follows from here
+  const next = L.applied && L.target > L.applied.level ? L.applied.level + 1 : null;
   win.querySelector('.lu-foot').replaceChildren(...(L.applied
-    ? [h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: close }, 'Close')]
+    ? [next ? h('button', { class: 'btn', onclick: close }, 'Stop here') : null, h('span', { class: 'grow' }),
+      next ? h('button', { class: 'btn primary lu-chain', onclick: () => { const target = L.target; close(); start({ target }); } }, `Level ${next} of ${L.target} →`)
+        : h('button', { class: 'btn primary', onclick: close }, 'Close')]
     : [h('button', { class: 'btn', onclick: () => cancel() }, 'Cancel'), h('span', { class: 'grow' }),
       i > 0 ? h('button', { class: 'btn', onclick: () => go(-1) }, '← Back') : null,
       last ? h('button', { class: 'btn primary lu-apply', onclick: apply }, 'Apply to sheet') : h('button', { class: 'btn primary lu-next', onclick: () => go(1) }, 'Next →')]
@@ -1049,22 +1114,38 @@ function confirmBox(title, text, okLabel, onOk, noLabel = 'Not now') {
   window.ask({ title, text, buttons: onOk ? [{ label: noLabel, value: false }, ok] : [ok] }).then(yes => { if (yes) onOk?.(); });
 }
 
-function start() {
-  const first = C.classes[0];
-  L = { key: first.key, isNew: false, picks: {}, spells: {}, ui: {}, hp: { mode: 'fixed', roll: null }, off: new Set(), stepId: 'class',
-    dirty() { return this.stepId !== 'class' || Object.keys(this.picks).length > 0 || this.isNew || this.hp.roll != null; } };
+// opts: { key (a new character's class, chosen in the sheet maker: no Class step), target (the level to reach: a button to
+// the next Level up after Apply), picks (choices already made, e.g. the Monk's tool or an Elf's lineage ability) }.
+// With no class on the sheet it is a new character's level 1 (L.first): all of the class's proficiencies, the Hit Die's
+// highest number for HP, and the background's Origin feat.
+function start(opts = {}) {
+  const first = !C.classes.length, key = opts.key || (first ? 'fighter' : C.classes[0].key);
+  L = { key, isNew: first, first, fixedClass: !!opts.key, target: opts.target || null, picks: { ...opts.picks }, spells: {}, ui: {},
+    hp: { mode: 'fixed', roll: null }, off: new Set(), stepId: null,
+    dirty() { return this.stepIndex > 0 || Object.keys(this.picks).length > 0 || this.isNew || this.hp.roll != null; } };
+  if (first) presetFirst();
   resetSwap();
   openWindow();
 }
+// The Origin feat comes preselected from the background (it can still be changed)
+function presetFirst() {
+  const bg = C.backgroundData;
+  if (bg?.feat && !L.picks.origin) L.picks.origin = { name: bg.feat };
+}
+// Class skills (and tools) a new character still has to pick
+const missingFirst = () => L.first && ((L.picks['mc:sk'] || []).length < cls().skills.choose ||
+  (cls().toolChoice && (L.picks['mc:tools'] || []).filter(textOf).length < cls().toolChoice.count));
 
 $('levelUp').addEventListener('click', () => {
   if (win) { win.classList.remove('flash'); void win.offsetWidth; win.classList.add('flash'); return; }
-  if (!C.classes?.length) return confirmBox('No class on the sheet', 'Write your class and level in the Class box first (for example "Fighter 3"), then level up.', 'OK');
+  if (!C.classes?.length) return confirmBox('No class on the sheet', 'Start a new character at level 1? You pick a class, its skills and features, ' +
+    'spells and Hit Points. (If the character has a class already, write it in the Class box first, for example "Fighter 3".)', 'Start at level 1', () => start());
   if (total() >= 20) return confirmBox('Level 20', `${who()} is level 20 already, the highest level there is.`, 'OK');
   confirmBox('Level up?', `Take ${who()} from level ${total()} to level ${total() + 1}? A window walks you through it, and nothing on the sheet changes until you apply it at the end.`,
     'Level up', start);
 });
 document.addEventListener('sheet-loaded', () => { close(); $('levelUp').disabled = false; });
+window.levelUp = { start }; // the sheet maker opens level 1 with start({ key, target, picks })
 // Keep the window up to date when the sheet is edited by hand (but not while typing in it, or while applying)
 document.addEventListener('character-change', () => {
   const typing = win?.contains(document.activeElement) && document.activeElement.matches('input, select');

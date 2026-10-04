@@ -29,7 +29,12 @@ const FIELD_MAP = {
   spellDC: ['SpellSaveDC', 'SpellSaveDC 2', 'Spell Save DC'], spellAttack: ['SpellAtkBonus', 'SpellAtkBonus 2', 'Spell Attack Bonus'],
   features: ['Features and Traits', 'FeaturesTraits', 'Features'], proficiencies: ['ProficienciesLang', 'Proficiencies'],
   equipment: ['Equipment'], attacksText: ['AttacksSpellcasting', 'Attacks & Spellcasting'],
-  cp: ['CP'], sp: ['SP'], ep: ['EP'], gp: ['GP'], pp: ['PP']
+  cp: ['CP'], sp: ['SP'], ep: ['EP'], gp: ['GP'], pp: ['PP'],
+  // details (the classic sheet's page 2 and personality boxes); "Feat+Traits" is its Additional Features & Traits box
+  playerName: ['PlayerName', 'Player Name'], name2: ['CharacterName 2'], age: ['Age'], height: ['Height'], weight: ['Weight'],
+  eyes: ['Eyes'], skin: ['Skin'], hair: ['Hair'], personality: ['PersonalityTraits', 'Personality Traits'], ideals: ['Ideals'],
+  bonds: ['Bonds'], flaws: ['Flaws'], allies: ['Allies'], backstory: ['Backstory'], treasure: ['Treasure'],
+  featsText: ['Feat+Traits', 'Additional Features and Traits'], spellClass: ['Spellcasting Class 2', 'SpellcastingClass', 'Spellcasting Class']
 };
 // Spell slot totals per level: "SlotsTotal 19" is level 1 on the classic fillable sheet. The box printed "Slots Expended"
 // next to it is named "SlotsRemaining 19" there; it holds the slots used.
@@ -39,7 +44,8 @@ for (let l = 1; l <= 9; l++) {
 }
 const TEXT_KEYS = new Set(['name', 'classLevel', 'race', 'background', 'alignment', 'hitDice', 'hitDiceTotal', 'spellAbility',
   'features', 'proficiencies', 'equipment', 'attacksText', 'subclass', 'size', 'features2', 'speciesTraits', 'featsText',
-  'weaponProficiencies', 'toolProficiencies', 'appearance', 'backstory', 'languages']);
+  'weaponProficiencies', 'toolProficiencies', 'appearance', 'backstory', 'languages', 'playerName', 'name2', 'age', 'height',
+  'weight', 'eyes', 'skin', 'hair', 'personality', 'ideals', 'bonds', 'flaws', 'allies', 'treasure', 'spellClass']);
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 const fields = {};             // every PDF field by name, e.g. fields['HPCurrent'] (also window.fields)
 const character = {};          // live stats: character.hp, character.str, ... (also window.character)
@@ -977,12 +983,16 @@ window.sheet = {
   field: key => fieldOf[key] ?? null,
   get: currentValue,
   set(name, value) { const ok = writeField(name, value); if (ok) refreshCharacter(); return ok; },
+  // several fields at once, then one refresh: [[field name, value], ...] (the sheet maker writes scores and modifiers together)
+  setMany(pairs) { let n = 0; for (const [name, value] of pairs) if (name && writeField(name, value)) n++; refreshCharacter(); return n; },
+  weaponRows: () => weaponRows.map(r => ({ ...r })),
   profBox: key => fieldOf[key] && meta[fieldOf[key]] ? profBoxOf(fieldOf[key]) : null,
   multiline: name => !!meta[name]?.multi,
   spellLines,
   writeSpell(line, s) { writeSpellLine(line, s); refreshCharacter(); },
   spellNamed
 };
+window.openPdf = load; // open a PDF File (the sheet maker's blank sheet); resolves once it is loaded
 $('file').addEventListener('change', e => { load(e.target.files[0]); e.target.value = ''; });
 $('addText').addEventListener('click', () => setAddMode(!addMode));
 $('zoom').addEventListener('input', e => setZoom(+e.target.value));
