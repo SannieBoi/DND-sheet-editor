@@ -467,8 +467,7 @@ function open() {
       h('button', { class: 'lu-x', title: 'Close', 'aria-label': 'Close', onclick: cancel }, '✕')),
     h('nav', { class: 'lu-steps' }), h('div', { class: 'lu-body' }), h('div', { class: 'lu-foot' }));
   document.body.append(win);
-  const w = Math.min(600, innerWidth - 24);
-  window.draggable(win, win.querySelector('.lu-bar'))((innerWidth - w) / 2, 60);
+  window.draggable(win, win.querySelector('.lu-bar'))(); // centred, at the top
   render();
 }
 function close() { win?.remove(); win = null; M = null; }

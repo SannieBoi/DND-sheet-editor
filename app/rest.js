@@ -421,8 +421,7 @@ function openRest(kind) {
       h('button', { class: 'lu-x', title: 'Close', 'aria-label': 'Close', onclick: () => R.applied ? close() : cancel() }, '✕')),
     h('div', { class: 'lu-body' }), h('div', { class: 'lu-foot' }));
   document.body.append(win);
-  const w = Math.min(520, innerWidth - 24);
-  window.draggable(win, win.querySelector('.lu-bar'))((innerWidth - w) / 2, 80);
+  window.draggable(win, win.querySelector('.lu-bar'))(); // centred, at the top
   render();
 }
 function close() { win?.remove(); win = null; R = null; }

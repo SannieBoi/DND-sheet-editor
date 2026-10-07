@@ -172,14 +172,110 @@ function findEntry(text, list, nameOf = e => e.name) {
 }
 const speciesNames = s => [s.name, ...s.aliases || []];
 
-// Feats named anywhere in the sheet's text. Text that holds a feat's name without being that feat is skipped: a longer
+// Feats named anywhere in the sheet's text -> [{ feat, field, at (just after its first mention, feature boxes first),
+// kept (a mention is followed by DM_MARK) }]. Text that holds a feat's name without being that feat is skipped: a longer
 // feat name ("Great Weapon Master" is not "Weapon Master") and the feat's own `unless` ("Blessed Healer", "Healer's Kit").
 const escRe = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const FEAT_RES = new Map(D.feats.map(f => {
+  const skip = [...D.feats.filter(o => o.name !== f.name && o.name.includes(f.name)).map(o => escRe(o.name)), f.unless].filter(Boolean).join('|');
+  return [f, { re: new RegExp('\\b' + escRe(f.name) + '\\b', 'g'), skip: skip ? new RegExp(skip, 'g') : null }];
+}));
+const blank = (text, re) => re ? text.replace(re, m => ' '.repeat(m.length)) : text; // same length, so positions hold
 function findFeats(allText) {
-  return D.feats.filter(f => {
-    const skip = [...D.feats.filter(o => o.name !== f.name && o.name.includes(f.name)).map(o => escRe(o.name)), f.unless].filter(Boolean).join('|');
-    return new RegExp('\\b' + escRe(f.name) + '\\b').test(skip ? allText.replace(new RegExp(skip, 'g'), '') : allText);
-  }).map(f => f.name);
+  const texts = [...new Set([...FEATURE_BOXES.map(k => fieldOf[k]), ...Object.keys(fields)])].filter(n => n && typeof fields[n] === 'string' && fields[n]);
+  return D.feats.flatMap(f => {
+    const { re, skip } = FEAT_RES.get(f);
+    re.lastIndex = 0;
+    const named = re.test(blank(allText, skip));
+    re.lastIndex = 0; // matchAll starts where the regex's lastIndex is
+    if (!named) return [];
+    let first = null, kept = false;
+    for (const name of texts) {
+      for (const m of blank(fields[name], skip).matchAll(re)) {
+        const at = m.index + m[0].length;
+        first ??= { field: name, at };
+        kept ||= MARK_AFTER.test(fields[name].slice(at));
+      }
+    }
+    return first ? [{ feat: f, ...first, kept }] : [];
+  });
+}
+
+// ---- Beyond the rules -------------------------------------------------------------------------------------------
+// Things on the sheet the character can't have yet: a feat below its level (or a Fighting Style feat without the
+// Fighting Style feature), a class feature of a higher class level or of a class the character doesn't have, a line
+// written as "(Fighter 9)" on a Fighter 1, a species trait of a later level. They do nothing (feats stay out of
+// character.feats) unless "[DM allowed]" follows the name on the sheet: beyond.js asks, and writes it there when the
+// player keeps one, so the DM can see it in the app and in the PDF (and the roll log names it when a roll uses it).
+// An unknown class or level isn't checked. character.beyond = [{ id, kind: 'feat' | 'feature', name, why, field, at, kept }]
+const DM_MARK = '[DM allowed]', MARK_AFTER = /^[^\S\n]*\[DM allowed\]/i;
+// Boxes whose lines start with a feature's name ("Indomitable (Fighter 9): ..."); the level-up writes them that way
+const FEATURE_BOXES = ['features', 'features2', 'featsText', 'speciesTraits'];
+// Class and subclass features by name: { name, by: { classKey: the lowest class level it comes at } }
+const CLASS_FEATURES = new Map();
+for (const [key, c] of Object.entries(D.classes)) {
+  for (const f of [...c.features, ...c.subclass.features]) {
+    if (/Subclass$|^(Ability Score Improvement|Epic Boon)$/.test(f.name)) continue; // feats are checked as feats
+    const e = CLASS_FEATURES.get(norm(f.name)) || { name: f.name, by: {} };
+    e.by[key] = Math.min(e.by[key] ?? 20, f.lvl);
+    CLASS_FEATURES.set(norm(f.name), e);
+  }
+}
+// Names other things give too (subclasses outside the free rules, feats, invocations, items): only a class level short
+// of it counts, not a missing class
+const SHARED_FEATURES = new Set(['Spellcasting', 'Extra Attack', 'Expertise', 'Weapon Mastery', 'Fighting Style', 'Evasion',
+  'Unarmored Defense', 'Bonus Proficiencies', 'Metamagic', 'Eldritch Invocations', 'Pact Magic', 'Channel Divinity', 'Uncanny Dodge']);
+const CLASS_TAG = new RegExp(`\\b(${Object.values(D.classes).map(c => c.name).join('|')})\\s+(\\d+)\\b`, 'i');
+const FEAT_NAMES = new Set(D.feats.flatMap(f => [f.name, ...f.aliases || []]).map(norm));
+
+// Why a feat is out of reach (null = it isn't)
+function featWhy(f) {
+  const p = f.prerequisite, c = character;
+  if (p?.minimum_level && c.level && c.level < p.minimum_level) return `a feat for level ${p.minimum_level} and up; the sheet says level ${c.level}`;
+  if (p?.feature_named === 'Fighting Style' && c.classes.length &&
+    !c.classes.some(x => D.classes[x.key].features.some(g => g.lvl <= x.level && g.choice?.category === 'fighting-style'))) {
+    return 'needs the Fighting Style feature (Fighter 1, Paladin 2, Ranger 2)';
+  }
+  return null;
+}
+
+// Feature lines out of reach, read from the start of each line in the feature boxes
+function featureClaims() {
+  const c = character, out = new Map(), have = Object.fromEntries(c.classes.map(x => [x.key, x.level]));
+  const cname = k => D.classes[k].name, mine = c.classes.map(x => `${x.name} ${x.level}`).join(' / ');
+  const sp = c.speciesData, later = new Map((sp?.features || []).filter(f => c.level && f.lvl > c.level).map(f => [norm(f.name), f]));
+  for (const key of FEATURE_BOXES) {
+    const field = fieldOf[key], text = field && currentValue(field);
+    if (typeof text !== 'string') continue;
+    let start = 0;
+    for (const line of text.split('\n')) {
+      const lead = line.match(/^[\s•*·-]*/)[0].length, head = line.slice(lead).split(/\s*(?:[:([]|\s[-–]\s)/)[0].trim();
+      const rest = line.slice(lead + head.length), at = start + lead + head.length;
+      start += line.length + 1;
+      if (!head || FEAT_NAMES.has(norm(head))) continue;
+      const e = CLASS_FEATURES.get(norm(head)), owners = e ? Object.entries(e.by) : [];
+      let why = null;
+      if (e && c.classes.length) {
+        const near = owners.filter(([k]) => have[k]);
+        if (near.some(([k, l]) => have[k] >= l)) continue;
+        if (near.length) why = `${near.map(([k, l]) => `${cname(k)} level ${l}`).join(' or ')}; the sheet says ${mine}`;
+        else if (!SHARED_FEATURES.has(e.name)) {
+          why = `a ${owners.map(([k, l]) => cname(k) + (l > 1 ? ` level ${l}` : '')).join(' or ')} feature; no ${owners.map(([k]) => cname(k)).join(' or ')} levels on the sheet`;
+        }
+      } else if (!e && later.has(norm(head))) {
+        why = `a ${sp.name} trait from level ${later.get(norm(head)).lvl}; the sheet says level ${c.level}`;
+      } else if (!e && c.classes.length) {
+        const tag = rest.match(/^[^\S\n]*(?:\[[^\]\n]*\][^\S\n]*)?\(([^()\n]*)\)/)?.[1].match(CLASS_TAG);
+        const k = tag && Object.keys(D.classes).find(x => cname(x).toLowerCase() === tag[1].toLowerCase());
+        if (k && (have[k] || 0) < +tag[2]) why = `written as ${cname(k)} ${tag[2]}; the sheet says ${mine}`;
+      }
+      if (!why) continue;
+      const id = 'feature:' + norm(head), kept = MARK_AFTER.test(rest);
+      if (out.has(id)) out.get(id).kept ||= kept;
+      else out.set(id, { id, kind: 'feature', name: head, why, field, at, kept });
+    }
+  }
+  return [...out.values()];
 }
 
 // "Fighter 5", "Rogue 3 / Wizard 2", "Level 4 Cleric" -> [{ key, name, level }]
@@ -311,10 +407,14 @@ function readGameData() {
   c.level = c.classes.reduce((t, x) => t + x.level, 0) || (typeof c.level === 'number' ? c.level : null);
   if (typeof c.profBonus !== 'number') c.profBonus = D.rules.proficiencyBonusByLevel[Math.min(20, c.level || 1) - 1];
   const allText = Object.values(fields).filter(v => typeof v === 'string').join('\n');
-  c.feats = findFeats(allText);
   c.speciesData = findEntry(c.race, D.species, speciesNames);
   c.lineage = c.speciesData && findEntry(c.race, c.speciesData.subspecies, s => s.name.split(': ').pop());
   c.backgroundData = findEntry(c.background, D.backgrounds);
+  // feats out of reach count only when kept ([DM allowed] on the sheet), see "Beyond the rules"
+  const feats = findFeats(allText).map(x => ({ ...x, why: featWhy(x.feat) }));
+  c.feats = feats.filter(x => x.kept || !x.why).map(x => x.feat.name);
+  c.beyond = [...feats.filter(x => x.why).map(x => ({ id: 'feat:' + x.feat.name, kind: 'feat', name: x.feat.name, why: x.why, field: x.field, at: x.at, kept: x.kept })),
+    ...featureClaims()];
   c.mods = Object.fromEntries(Object.keys(D.rules.abilities).map(ab => [ab, abilityMod(ab.toLowerCase())]));
   c.spellcasting = spellcasting();
   c.critRange = critRange();
@@ -658,7 +758,7 @@ const fieldText = name => { const v = currentValue(name); return Array.isArray(v
 const changedStep = s => s.state || [...s.changes.values()].some(c => c.before !== c.after);
 const stateJSON = () => JSON.stringify({ ...sheetState, extraPages: undefined }); // extraPages only matters to the download
 const STATE_LABELS = { marble: 'Killing Marble', mode: 'Sheet mode', effects: 'Effects', concentration: 'Concentration',
-  used: 'Class features', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice' };
+  used: 'Class features', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice', beyondIgnored: 'Beyond the rules' };
 
 function newStep(s) {
   history.undo.push(s);
@@ -731,6 +831,7 @@ function replay(s, which) {
   snap = null;
   refreshCharacter();
   undoButtons();
+  document.dispatchEvent(new CustomEvent('history-replay')); // Undo / Redo done (beyond.js doesn't ask about what it brought back)
 }
 
 // What a step is called: "Level up", "STR", "Stealth" (by its stat key), else the field's own name
@@ -990,7 +1091,8 @@ window.sheet = {
   multiline: name => !!meta[name]?.multi,
   spellLines,
   writeSpell(line, s) { writeSpellLine(line, s); refreshCharacter(); },
-  spellNamed
+  spellNamed,
+  dmMark: DM_MARK // follows a thing kept beyond the rules (beyond.js)
 };
 window.openPdf = load; // open a PDF File (the sheet maker's blank sheet); resolves once it is loaded
 $('file').addEventListener('change', e => { load(e.target.files[0]); e.target.value = ''; });

@@ -660,9 +660,11 @@ const targetOf = kind => TEXT_TARGET[kind].map(S.field).find(Boolean) || null;
 const boxName = key => ({ features: 'Features', features2: 'Features', featsText: 'Feats', speciesTraits: 'Species Traits', proficiencies: 'Proficiencies',
   weaponProficiencies: 'Weapons', toolProficiencies: 'Tools', languages: 'Languages' })[key];
 const targetName = kind => boxName(TEXT_TARGET[kind].find(S.field)) || '';
-function appendText(field, line) {
+// gap: an empty line before the new line (features, feats, traits: a box of long lines is easier to read with space
+// between them; a PDF text box can't hold bold text). Text already in the box is left as it is.
+function appendText(field, line, gap = false) {
   const cur = String(S.get(field) ?? '').replace(/\s+$/, '');
-  S.set(field, cur ? cur + (S.multiline(field) ? '\n' : '; ') + line : line);
+  S.set(field, cur ? cur + (S.multiline(field) ? gap ? '\n\n' : '\n' : '; ') + line : line);
 }
 
 // Proficiency (want 1) or Expertise (want 2) in a skill or save: tick its box (its rule adds PB) and/or raise the number
@@ -821,7 +823,7 @@ function changes() {
     const feat = kind === 'feat' && D.feats.find(x => x.name === L.picks[f.id].name);
     const note = f.choice ? pickText(f) || 'not chosen yet' : f.text, more = !f.choice ? null : kind === 'feat' ? (feat && !feat.abilityIncrease?.options ? feat.summary : null) : f.text;
     if (f.choice && unpicked(f)) add('Features', 90, { label: f.name, src: f.src, note: 'Not chosen yet, so nothing is written: add it to the sheet once you decide.', more });
-    else add('Features', 90, t ? { id: 'f:' + f.id, label: f.name, src: f.src, note, more, apply: () => appendText(t, line), where: targetName(kind) }
+    else add('Features', 90, t ? { id: 'f:' + f.id, label: f.name, src: f.src, note, more, apply: () => appendText(t, line, true), where: targetName(kind) }
       : { label: f.name, src: f.src, note: note + '. No Features box found: note it yourself.', more });
   }
   if (L.isNew && !L.first) add('Features', 89, { label: `${c.name} multiclass`, note: c.multiclass.text });
@@ -1097,8 +1099,7 @@ function openWindow() {
       h('button', { class: 'lu-x', title: 'Close', 'aria-label': 'Close', onclick: () => L.applied ? close() : cancel() }, '✕')),
     h('nav', { class: 'lu-steps' }), h('div', { class: 'lu-body' }), h('div', { class: 'lu-foot' }));
   document.body.append(win);
-  const w = Math.min(560, innerWidth - 24);
-  window.draggable(win, win.querySelector('.lu-bar'))((innerWidth - w) / 2, 70); // dialog.js
+  window.draggable(win, win.querySelector('.lu-bar'))(); // dialog.js: centred, at the top
   render();
 }
 

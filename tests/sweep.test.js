@@ -58,20 +58,23 @@ console.error = (...a) => { errors.push(a.map(String).join(' ')); realError(...a
     if (errors.length > before || !applied || !rows) log(`FAIL ${label}: ${errors.slice(before).join(' | ') || (applied ? 'no rows' : 'not applied')}`);
     return errors.length === before && applied;
   };
-  let good = 0, total = 0;
+  let good = 0, total = 0, beyondBad = 0;
   for (const key of Object.keys(DND.classes)) {
     const name = DND.classes[key].name;
+    type('Features and Traits', ''); // each class starts with an empty features list (the old class's would be out of reach)
     for (let lvl = 1; lvl < 20; lvl++) {
       type('ClassLevel', `${name} ${lvl}`);
       total++; if (await levelUp(null, `${name} ${lvl} -> ${lvl + 1}`)) good++;
+      if (character.beyond.length) { beyondBad++; log(`FAIL ${name} ${lvl + 1}: the level up wrote something out of reach: ${character.beyond.map(b => `${b.name} (${b.why})`).join('; ')}`); }
     }
   }
   ok(good === total, `every class from level 1 to 20 levels up without errors (${good}/${total})`);
+  ok(!beyondBad, 'nothing a level up writes counts as beyond the rules for the new level');
   good = 0; total = 0;
   for (const key of Object.keys(DND.classes)) {
     for (const from of ['fighter', 'wizard']) {
       if (key === from) continue;
-      type('ClassLevel', `${DND.classes[from].name} 4`);
+      type('ClassLevel', `${DND.classes[from].name} 4`); type('Features and Traits', '');
       total++;
       if (await levelUp(() => { btnIn(W().querySelector('.lu-body'), 'A new class').click(); btnIn(W().querySelector('.lu-body'), DND.classes[key].name).click(); },
         `${from} 4 + ${key} 1`)) good++;

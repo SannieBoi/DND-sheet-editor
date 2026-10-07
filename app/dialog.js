@@ -31,9 +31,10 @@ window.ask = ({ title, text, body = null, buttons = [{ label: 'OK', value: true,
 
 /* A window that is not modal and can be dragged by its title bar (level up, rests): window.draggable(win, handle)
    returns place(x, y), which keeps at least the bar on screen. Offsets are used, not the bounding box: that one moves
-   while the window pops in. */
+   while the window pops in. place() with no numbers = where windows open: centred, as high as it goes (12px, the
+   margin the CSS max-height leaves), so a tall window's buttons at the bottom are on screen too. */
 window.draggable = (win, handle) => {
-  const place = win.place = (x, y) => {
+  const place = win.place = (x = (innerWidth - win.offsetWidth) / 2, y = 12) => {
     win.style.left = Math.max(120 - win.offsetWidth, Math.min(innerWidth - 120, x)) + 'px';
     win.style.top = Math.max(0, Math.min(innerHeight - 44, y)) + 'px';
   };

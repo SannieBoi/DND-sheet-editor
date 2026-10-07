@@ -95,6 +95,12 @@ const lvlRow = key => { const c = (C.classes || []).find(x => x.key === key); re
 const hasClass = key => (C.classes || []).some(x => x.key === key);
 const knows = name => (C.spells || []).some(x => x.spell.name === name);
 const hasFeat = name => (C.feats || []).includes(name);
+// Feats kept beyond the rules ("[DM allowed]" on the sheet, see beyond.js): a roll that uses one says so in the log, so
+// the DM can see it. names: the feats this roll used.
+function beyondLine(names) {
+  const list = (C.beyond || []).filter(b => b.kept && b.kind === 'feat' && names.includes(b.name));
+  return list.length ? h('p', { class: 'note beyond' }, `⚠ Beyond the rules, marked "DM allowed" on the sheet: ${list.map(b => `${b.name} (${b.why})`).join('; ')}.`) : null;
+}
 // Elemental Adept's damage types, from the sheet's text: "Elemental Adept (Fire)", "Elemental Adept: WIS +1; Fire (Wizard 4): ..."
 const ADEPT = ['acid', 'cold', 'fire', 'lightning', 'thunder'];
 const adeptTypes = () => !hasFeat('Elemental Adept') ? [] : [...Object.values(C).filter(v => typeof v === 'string').join('\n')
@@ -191,6 +197,7 @@ function attackSetup(item, o) {
   const a = w && M.weaponAttack(w, item.magic, { twoHanded: o.twoHanded, casting, die });
   const sheetHit = parseHit(item.sheetBonus), sheetDmg = parseDamageText(item.sheetDamage, w?.dmg);
   let toHit, parts, source;
+  const used = []; // the feats this attack uses (beyondLine)
   if (a && (casting || o.twoHanded || sheetHit == null || !sheetDmg)) {
     toHit = a.toHit; parts = parseDamageText(a.damage, a.type) || []; source = 'Worked out from the rules';
   } else {
@@ -204,6 +211,7 @@ function attackSetup(item, o) {
     parts[0].label = item.name;
     if (o.cleave) parts[0].flat -= Math.max(0, abilityMod); // Cleave: the second creature's damage leaves out a positive modifier
     parts[0].gwf = (C.feats || []).includes('Great Weapon Fighting') && melee && !!(w?.props.includes('two-handed') || o.twoHanded);
+    if (parts[0].gwf) used.push('Great Weapon Fighting');
     parts[0].savage = !!o.savage;
   }
   const toggles = [], extras = [], testDice = [];
@@ -219,18 +227,20 @@ function attackSetup(item, o) {
     const on = o.mastery ?? masteredByDefault(w);
     toggle('mastery', `Mastery: ${cap(w.mastery)}`, { on });
     if (on) mastery = w.mastery;
+    if (on && !(C.classes || []).some(x => D.classes[x.key].weaponMastery)) used.push('Weapon Master');
   }
+  if (a && toHit === a.toHit && w?.kind === 'ranged' && hasFeat('Archery')) used.push('Archery'); // in the worked-out bonus
   // Feats. On by default where they nearly always apply (Great Weapon Master, Dueling, Thrown Weapon Fighting when thrown)
   const pb = C.profBonus || 2, heavy = !!w?.props.includes('heavy'), notes = [];
-  const featBonus = (id, label, on, part) => { toggle(id, label, { on: o[id] ?? on }); if (o[id] ?? on) extras.push(part); };
+  const featBonus = (id, label, on, part) => { toggle(id, label, { on: o[id] ?? on }); if (o[id] ?? on) { extras.push(part); used.push(part.label); } };
   if (heavy && hasFeat('Great Weapon Master')) featBonus('gwm', `Great Weapon Master +${pb}`, true, { label: 'Great Weapon Master', n: 0, d: 0, flat: pb, type });
   if (w && melee && !w.unarmed && !twoHands && hasFeat('Dueling')) featBonus('dueling', 'Dueling +2 (no other weapon)', true, { label: 'Dueling', n: 0, d: 0, flat: 2, type });
   if (w?.props.includes('thrown') && hasFeat('Thrown Weapon Fighting')) featBonus('thrown', 'Thrown +2', w.kind === 'ranged', { label: 'Thrown Weapon Fighting', n: 0, d: 0, flat: 2, type });
-  if (w && melee && hasFeat('Charger') && toggle('charge', 'Charge +1d8 (moved 10 ft straight)')) extras.push({ label: 'Charger', n: 1, d: 8, flat: 0, type });
-  if (w?.unarmed && hasFeat('Unarmed Fighting')) toggle('bare', 'No weapon or Shield in hand (d8)', { on: o.bare ?? true });
+  if (w && melee && hasFeat('Charger') && toggle('charge', 'Charge +1d8 (moved 10 ft straight)')) { extras.push({ label: 'Charger', n: 1, d: 8, flat: 0, type }); used.push('Charger'); }
+  if (w?.unarmed && hasFeat('Unarmed Fighting')) { toggle('bare', 'No weapon or Shield in hand (d8)', { on: o.bare ?? true }); used.push('Unarmed Fighting'); }
   if (parts[0] && hasFeat('Piercer') && type === 'piercing') parts[0].critExtra = 1;
   if (parts[0] && w?.unarmed && hasFeat('Tavern Brawler')) parts[0].reroll1 = true;
-  const note = (feat, text) => { if (hasFeat(feat)) notes.push([feat, text]); };
+  const note = (feat, text) => { if (hasFeat(feat)) { notes.push([feat, text]); used.push(feat); } };
   if (w?.kind === 'ranged') note('Sharpshooter', 'ignore Half and Three-Quarters Cover; no Disadvantage at long range or with an enemy within 5 ft.');
   if (/crossbow/i.test(w?.name || '')) note('Crossbow Expert', 'ignore Loading; no Disadvantage with an enemy within 5 ft.');
   if (heavy && melee) note('Great Weapon Master', 'after a Critical Hit or dropping a creature to 0 HP, one more attack with this weapon as a Bonus Action.');
@@ -265,7 +275,7 @@ function attackSetup(item, o) {
   toHit += parseInt(o.extraHit, 10) || 0;
   for (const p of parseDamageText(o.extraDmg, type) || []) extras.push({ label: 'Extra', ...p });
   for (const p of window.effects?.forRoll({ kind: 'damage', ability, arms }).parts || []) extras.push({ label: p.name, n: 0, d: 0, flat: p.mod, type });
-  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, abilityMod, source, melee, w, arms, notes, mastery, riders };
+  return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, abilityMod, source, melee, w, arms, notes, mastery, riders, used };
 }
 
 const knownSpells = () => (C.spells || []).map(x => x.spell);
@@ -278,7 +288,7 @@ function rollAttack(item, mode, o = { ...opt(item.key) }, again = false, vex = !
   const test = d20Test(mode, s.toHit, s.testDice, C.critRange || 20, fx);
   const node = log({ title: item.name + (o.cleave ? ' (Cleave)' : ''), tag: ['Attack', fx.tag],
     lines: [{ test, damage: s.parts.length && !test.fumble ? rollDamage(s.parts, test.crit) : null }],
-    notes: fx.notes, extra: s.mastery ? [masteryNotes(s.mastery, s, test, again, item, o)] : [],
+    notes: [...fx.notes, beyondLine(s.used)], extra: s.mastery ? [masteryNotes(s.mastery, s, test, again, item, o)] : [],
     again: m => rollAttack(item, m, o, true, vex), test: true, mode });
   // a smite toggled on is a spell cast with a slot
   if (!again) for (const r of s.riders) if (castPerHit(r.spell)) slotLine(node, r.spell, r.slot, false);
@@ -287,7 +297,7 @@ function rollAttack(item, mode, o = { ...opt(item.key) }, again = false, vex = !
 
 function rollAttackDamage(item, crit, o = { ...opt(item.key) }) {
   const s = attackSetup(item, o);
-  log({ title: item.name, tag: [crit ? 'Critical damage' : 'Damage'], lines: [{ damage: rollDamage(s.parts, crit) }],
+  log({ title: item.name, tag: [crit ? 'Critical damage' : 'Damage'], lines: [{ damage: rollDamage(s.parts, crit) }], notes: [beyondLine(s.used)],
     again: () => rollAttackDamage(item, crit, o) });
 }
 
@@ -309,7 +319,7 @@ function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
     if (o.vex) { state.vex = null; queueMicrotask(render); }
   }
   const vex = !!o.vex, fx = withEffects({ kind: 'attack', ability: sc.ability }, mode, vex ? ['Vex'] : []);
-  const lines = [], many = r.count > 1, notes = [s.note];
+  const lines = [], many = r.count > 1, notes = [s.note, what !== 'heal' && parts.some(p => p.min2) ? beyondLine(['Elemental Adept']) : null];
   if (what === 'start') lines.push({});
   else if (what === 'heal') {
     const heal = [{ ...r.heal, type: s.temp ? 'temporary HP' : 'healing', label: s.name }], life = lifeHealing(s, slot);
@@ -387,7 +397,7 @@ async function cast(s, slot, run) {
 function rollTest(title, kind, mod, mode, extraDice = [], ability = null, skill = null, purpose = null) {
   const more = purpose === 'concentration' && hasFeat('War Caster') ? ['War Caster'] : [];
   const fx = withEffects({ kind: kind === 'Save' ? 'save' : 'check', ability, skill }, mode, more), test = d20Test(mode, mod, extraDice, null, fx);
-  log({ title, tag: [kind, fx.tag], lines: [{ test }],
+  log({ title, tag: [kind, fx.tag], lines: [{ test }], notes: [beyondLine(more)],
     again: m => rollTest(title, kind, mod, m, extraDice, ability, skill, purpose), test: true, mode });
   document.dispatchEvent(new CustomEvent('test-rolled', { detail: { kind, ability, skill, title, total: test.total, autoFail: test.autoFail.length > 0, purpose } }));
 }
@@ -466,7 +476,7 @@ function entryView(e) {
   if (e.lines.length > 1 && e.lines.some(l => l.damage)) {
     li.append(h('div', { class: 'grand' }, tests.length ? 'Total if all hit: ' : 'Total: ', h('b', {}, sum(e.lines.map(l => l.damage?.total ?? 0)))));
   }
-  for (const n of e.notes || []) if (n) li.append(h('p', { class: 'note' }, n));
+  for (const n of e.notes || []) if (n) li.append(n instanceof Node ? n : h('p', { class: 'note' }, n));
   li.append(...e.extra || []);
   // "Again" repeats the roll exactly; the other buttons switch between normal, Advantage and Disadvantage
   li.append(h('footer', {}, h('button', { onclick: () => e.again(e.mode) }, '↻ Again'),

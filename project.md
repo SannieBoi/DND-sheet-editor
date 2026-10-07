@@ -26,7 +26,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | data/sheet-2014.js, data/sheet-2024.js | the blank classic (2014, 3 pages) and official 2024 sheets as base64 (`window.BLANK_SHEETS.classic / .official2024`), loaded by maker.js with a script tag only when needed (file:// can't fetch). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
-| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests; `.lu` styles). |
+| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests, maker; `.lu` styles). `place()` with no numbers = where they open: centred, top 12px (user: Apply buttons must never start off screen; `.lu` max-height is 100vh - 24px). |
 | app/effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
 | marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
@@ -34,27 +34,30 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations. |
 | app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. Also a new character's level 1 (`L.first`). See "Level up" below. |
 | app/maker.js | the sheet maker: "…or create a new sheet" (#newSheet, under the drop area) -> New character window (Sheet / Class / Background / Species / Abilities / Equipment / Details / Review) -> opens a blank sheet, writes it, then `levelUp.start({ key, target, picks })`. See "Sheet maker" below. |
+| app/beyond.js | "Beyond the rules": asks about `character.beyond` items (keep = writes `[DM allowed]` after the name; ignore = `sheetState.beyondIgnored`). Loads last. See "Beyond the rules" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (400 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (433 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
   `classes, level, profBonus, mods{STR..}, feats, speciesData, lineage, backgroundData, spellcasting{ability,mod,attack,dc},
-  critRange, weapons[{name,bonus,damage,weapon,spell,magic,calc,fields}], spells[{spell,from}], skills, saves, initiativeMod`.
+  critRange, weapons[{name,bonus,damage,weapon,spell,magic,calc,fields}], spells[{spell,from}], skills, saves, initiativeMod,
+  beyond[{id ('feat:Name' | 'feature:<norm name>'), kind, name, why, field, at (index after the name), kept}]`. `feats` leaves out
+  out-of-reach feats unless kept.
 - `window.calc` = `{ weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor(classes) }` (script.js;
   slotsFor = slots per level of [{key, level}]: multiclass caster levels, Pact slots added at their level).
 - `window.sheet` (script.js, for levelup.js / rest.js / marble.js) = `{ map (the sheets.js entry or null), loaded, field(key) -> PDF field name, get(name),
   set(name, value) (writes + refreshCharacter; checkboxes take true/false), profBox(key) ('skill:X'/'save:AB' checkbox),
   multiline(name), spellLines() -> [{field, level (0 = cantrips, null = any), row (official sheet: level/time/range/notes/conc/ritual/material)}],
   writeSpell(line, spell), spellNamed(text), transaction(label, fn) (one Undo step for every write + sheetState change in fn), undo(), redo(),
-  setMany([[field, value]...]) (writes all, then one refresh), weaponRows() }`. `window.openPdf(file)` opens a PDF (resolves when loaded).
+  setMany([[field, value]...]) (writes all, then one refresh), weaponRows(), dmMark ('[DM allowed]') }`. `window.openPdf(file)` opens a PDF (resolves when loaded).
 - `window.levelUp.start({ key, target, picks })` (levelup.js), `window.maker = { open, state }` (maker.js).
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
   `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages,
   concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
-  hitDiceSpent: {die: n} }`. Empty maps are deleted, not left as {}.
+  hitDiceSpent: {die: n}, beyondIgnored: [beyond ids answered "Ignore"] }`. Empty maps are deleted, not left as {}.
 - `window.resources` (rest.js) = `{ slots() -> [{level,total,used,left}], slotsLeft(l), slotTotal(l), useSlot(l), restoreSlot(l) (false when
   nothing to do), list() -> class features [{id,name,max,used,left,back,note}], setUsed(id, n), hitDice() -> {dice:[{die,total,spent,left}], spent, box},
   view(), slotStrip(), openRest('short'|'long') }`. Every change goes through sheet.transaction, then fires `resources-change`.
@@ -68,6 +71,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - `window.marble.hourPasses()` (the page's "An hour passes" button).
 - Events on `document`: `character-change`, `sheet-loaded`, `effects-change`, `resources-change` (rest.js), `sheet-state-change`
   (Undo/Redo replaced sheetState: effects, marble, rest and roller redraw),
+  `history-replay` (script.js, after an Undo/Redo; beyond.js doesn't re-ask about what it brought back),
   `test-rolled` (roller.js, every check/save/initiative incl. "Again": detail `{kind:'Check'|'Save'|'Initiative', ability, skill, title, total, autoFail, purpose}`;
   purpose 'concentration' = a concentration save, which Killing Marble ignores). `roller.save(ability, title, purpose)`.
   roller.js `log()` returns the entry's element; `castSpell()` returns it too (cast() adds the concentration line).
@@ -138,8 +142,10 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   books' entries are `brief`: never invent their rules; only what the public list shows. Guessed prerequisites (Greater
   Mark needs its Mark) are `prerequisite.text` (shown, not checked). `unsure` ability increases let any score be picked.
 - Feats on the sheet: `findFeats` (script.js) skips text that holds a feat's name without being it: longer feat names
-  ("Great Weapon Master" is not "Weapon Master", "Greater Mark of X" not "Mark of X") and the feat's `unless`
-  ("Blessed Healer", "Healer's Kit", "Protection from", "Poisoner's Kit", "Speedy Recovery", "Unarmored Defense"). Species match by name or `aliases`; the longest match wins.
+  ("Great Weapon Master" is not "Weapon Master", "Greater Mark of X" not "Mark of X") and the feat's `unless` regex
+  ("Blessed Healer", "Healer's Kit", "Protection from", "Aura/Smite of Protection", "Poisoner's Kit", "Speedy Recovery",
+  "Unarmored/Patient/Superior Defense", "Hunter's Defense", "Remarkable Athlete": all found in feature text the level-up
+  writes; sweep.test checks none of it is flagged). Species match by name or `aliases`; the longest match wins.
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. The PHB adds feats, the Aasimar and 12 backgrounds.
 
 ## Rules decisions (keep consistent)
@@ -183,6 +189,25 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   total). The question lists each change and the rules it reaches; "Apply" or "Apply and roll CON save" (only when a part
   spreads into an unmarbled neighbour after the hour; the normal verdict / "Apply?" flow follows). One transaction (Undo).
   One hour per click; rests don't move the marble (their window says so).
+
+## Beyond the rules (script.js featureClaims/featWhy, beyond.js) — decisions
+- User (2026-10-07): don't let a sheet claim what the character can't possibly have (any class, not only Fighter); the
+  DM may have given it, so ask; if kept, it must be visible so the DM can spot cheating.
+- Out of reach: feats below `minimum_level` (General 4, Epic Boons 19); Fighting Style feats when no class level gives the
+  Fighting Style feature (data: a class feature whose choice category is 'fighting-style'); a class/subclass feature named at
+  the start of a line in the feature boxes (features, features2, featsText, speciesTraits) when the character has that class
+  below its level, or doesn't have any class that gets it (not for SHARED_FEATURES: Extra Attack, Expertise, Spellcasting ...
+  that subclasses outside the data, feats or items also give); an unknown name tagged "(Fighter 9)" above the sheet's
+  Fighter level; the character's own species traits of a later level. Unknown class/level = not checked. Spells are not
+  checked (scrolls, items); casting them without a slot already asks "Cast anyway" and the log says so.
+- Default: does nothing (feats left out of `character.feats`), no warning on the sheet. The question (window.ask) comes
+  250 ms after a change, never while a sheet box has focus (focusout re-checks), one question for all new items (tick
+  boxes when several). Primary button = Ignore. Keep -> " [DM allowed]" right after the name (visible in the PDF; the app
+  reads the mark as the decision, so deleting it un-keeps). Ignore -> `sheetState.beyondIgnored`. Escape -> not asked again
+  until a PDF is opened. Answers are one Undo step; after Undo/Redo nothing is re-asked.
+- Kept feats used by a roll add a `.note.beyond` line to the log entry (roller.js `beyondLine`; attackSetup collects
+  `used`: featBonus, Charger, Unarmed Fighting, GWF, notes, Weapon Master mastery, Archery; Elemental Adept on spells; War
+  Caster on concentration saves). Kept class features have no automation, only the mark.
 
 ## Rests and resources (rest.js) — decisions
 - Spell slots (user's spec): casting never uses a slot by itself; the log entry gets "Use a level N slot (x left)" (then
@@ -271,7 +296,8 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   a free line of their level's block, else any free line. Slot boxes shift by the table difference (multiclass caster levels
   added, half casters round up; Pact slots added to their level's box).
 - Text lines: features -> Features box ("Name (Fighter 5): text"); feats -> Feats box on the official sheet; species traits ->
-  Species Traits box; weapons/tools/languages -> their official boxes, else Proficiencies; armor -> official armor checkboxes.
+  Species Traits box (these three with an empty line between entries: user found the box hard to read, and PDF text
+  fields can't be bold; text already there is left alone); weapons/tools/languages -> their official boxes, else Proficiencies; armor -> official armor checkboxes.
   A choice not made writes nothing (listed under "Still to choose"). Sheet text uses no → / ✓ (WinAnsi).
 - Weapon Mastery counts come from `weaponMastery.countByLevel` (Rogue/Paladin/Ranger have no table column for it).
 - Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too. The picker has search + a book filter
@@ -282,7 +308,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Tough: +2 per level on the sheet, +2 x level when taken; Boon of Fortitude +40; feat `grants` go through collect().
 
 ## Testing
-- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal|feats|concentration|rest`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
+- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|heal|feats|concentration|rest|maker|beyond`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
   XHR (works with --allow-file-access-from-files), fills a Wizard 4 and levels it.
@@ -299,6 +325,10 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   details, every box written, Level 1 with skills, Divine Order, Magic Initiate (Wizard), lineage ability, spells) and a
   Human Monk 3 on the official sheet (PHB background + tool, size, point buy, 4d6 rolls, Monk tool -> 'mc:tools',
   Versatile feat, the Level 2 / Level 3 chain).
+- beyond.test.js: out-of-reach feats/features/tags/species traits, the question (tick boxes, Keep, Ignore, Escape), the
+  marks, the roll-log line, Undo/Redo, asking only after you leave the box, the PDF, Fighting Style (Paladin 1 vs 2), no
+  class = no check, windows opening at the top. A test that loads a sheet with out-of-reach things must answer the question
+  (it also matches `.ask`). sweep.test.js also checks a level up never writes anything out of reach.
 - levelup.test.js: named sheets (ASI, Dwarf HP, mastery, rolled HP, Wizard spells/slots/swap, multiclass Wizard and Rogue,
   cancel) + a synthetic official sheet. sweep.test.js: every class 1 -> 20 and multiclassing into every class, apply, no errors.
 - Headless virtual time races ahead while the browser waits for real work (reading a dropped file, pdf.js): waiting with

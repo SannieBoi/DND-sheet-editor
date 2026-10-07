@@ -50,6 +50,15 @@ FULL GUIDE
   you did, together with every box that followed it: change STR and its modifier, skills and attack lines all go back
   with it. A level up, a rest, a spell slot, an effect you added or a marble score count as one step each.
 - Zoom with the slider on the right, or Ctrl + mouse wheel. Click the % button to go back to 100%.
+- Things your character can't have yet: a feat above your level (e.g. Great Weapon Master, a level 4 feat, on a level 1
+  sheet), a Fighting Style feat without the Fighting Style feature, a class feature from a higher level or from a class
+  you don't have (Indomitable on a Fighter 1, Sneak Attack on a Wizard), a line written as "(Fighter 9)" on a Fighter 1,
+  or a species trait from a later level. These do nothing until you say otherwise. When one shows up (when you open the
+  sheet, or when you leave the box you typed it in), a question asks whether your DM allowed it:
+  - Keep it: "[DM allowed]" is written right after its name on the sheet, so your DM can see it (in the downloaded PDF
+    too). It then works as normal, and every roll that uses it says so in the log.
+  - Ignore it: it stays on the sheet as you wrote it but does nothing, and you aren't asked about it again.
+  Reach the level and it counts by itself. Undo takes your answer back.
 
 2b. CREATING A NEW SHEET ("…or create a new sheet" under the drop area)
 ------------------------------
@@ -76,7 +85,8 @@ Download the PDF afterwards to keep it. Press F5 to start over with an empty pag
 
 3. LEVEL UP (gold button in the header)
 ------------------------------
-It asks if you're sure, then opens a window you can drag around by its title bar, so you can still see the sheet.
+It asks if you're sure, then opens a window you can drag around by its title bar, so you can still see the sheet. Like
+the other windows it opens at the top of the screen, so its buttons are always in view.
 (A sheet without a class yet: it offers to start a level 1 character instead, with all of the class's proficiencies.)
 1. Class: level up a class you have, or pick a new one (multiclassing). If you don't meet the 13+ requirement it warns
    you but still lets you (your DM may allow it).
@@ -94,6 +104,7 @@ It asks if you're sure, then opens a window you can drag around by its title bar
 5. Review: every change with a tick box. Untick anything you don't want. Nothing touches the sheet until you press
    "Apply to sheet"; Cancel throws it all away. After applying, the window stays open as a list of what changed until you
    close it. Choices you skipped are listed under "Still to choose".
+New features, feats and species traits go into their boxes with an empty line between them, so each one is easy to find.
 
 4. ROLLING (the Roll tab on the right)
 ------------------------------
@@ -120,7 +131,8 @@ Feats on your sheet join in by themselves: Great Weapon Master (+Proficiency Bon
 Thrown Weapon Fighting, Charger (+1d8 when you charge), Unarmed Fighting and Tavern Brawler (bigger Unarmed Strike die),
 Piercer (one more die on a crit), Elemental Adept (1s count as 2 for your type), War Caster (Advantage on concentration
 saves). Each shows as a switch on the attack card, so you can turn it off. Sharpshooter, Crossbow Expert, Slasher, Crusher,
-Polearm Master and Shield Master show a short reminder on the card.
+Polearm Master and Shield Master show a short reminder on the card. A feat your character can't have yet only joins in
+once you keep it as "[DM allowed]" (see "Editing the sheet"), and the log then marks every roll that uses it.
 Every roll goes into the log below with Again / Advantage / Disadvantage buttons. "Clear" empties the log.
 Times in the log are in 24-hour format. "Again" is a reroll: it never uses another spell slot.
 

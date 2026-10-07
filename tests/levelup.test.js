@@ -119,7 +119,7 @@ function spellBlocks(add, blocks) {
   expect('Fighter 4 applied', { 'ClassLevel': 'Fighter 4 (Champion)', 'HPMax': '37', 'HPCurrent': '29', 'HDTotal': '4d10', 'HD': '4d10',
     'STR': '18', 'STRmod': '+4', 'Athletics': '+6', 'ST Strength': '+6', 'Perception ': '+1', 'ProfBonus': '+2',
     'Wpn1 AtkBonus': '+6', 'Wpn1 Damage': '1d8+4 slashing',
-    'Features and Traits': /^Second Wind\nAbility Score Improvement: STR \+2 \(Fighter 4\)\nWeapon Mastery \(Fighter 4\): Greatsword$/ });
+    'Features and Traits': /^Second Wind\n\nAbility Score Improvement: STR \+2 \(Fighter 4\)\n\nWeapon Mastery \(Fighter 4\): Greatsword$/ }); // an empty line between features
   ok(!!W() && /Level 4 applied/.test(body().textContent) && body().querySelectorAll('.lu-state.ok').length >= 8, 'the window stays open as a note of what changed');
   ok(btnIn(W().querySelector('.lu-foot'), 'Close') && !W().querySelector('.lu-apply'), 'after applying only Close is left');
   btnIn(W().querySelector('.lu-foot'), 'Close').click();
@@ -231,7 +231,7 @@ function spellBlocks(add, blocks) {
   ok(/Sneak Attack\s*2d6\s*→\s*3d6/.test(reviewText()), 'review: Sneak Attack 2d6 → 3d6');
   apply(); await wait(20);
   expect('official sheet: Rogue 5 applied', { 'Text11': '5', 'Text7': 'Rogue', 'Text16': '34', 'Text14': '27', 'Text17': '5d8', 'Text19': '+3',
-    'Text90': '+9', 'Text88': '+6', 'Text54': /^Sneak Attack\nCunning Strike \(Rogue 5\): .+\nUncanny Dodge \(Rogue 5\): / });
+    'Text90': '+9', 'Text88': '+6', 'Text54': /^Sneak Attack\n\nCunning Strike \(Rogue 5\): .+\n\nUncanny Dodge \(Rogue 5\): / });
   btnIn(W().querySelector('.lu-foot'), 'Close').click();
 
   // ---- 7. Fighter 4 -> Rogue 1: the multiclass skill, Expertise, Thieves' Cant, two weapon masteries
@@ -259,7 +259,7 @@ function spellBlocks(add, blocks) {
   expect('Fighter 4 / Rogue 1 applied', { 'ClassLevel': 'Fighter 4 / Rogue 1', 'HPMax': '43', 'HDTotal': '4d10 + 1d8', 'ProfBonus': '+3',
     'Stealth ': '+8', 'Athletics': '+9', 'Perception ': '+1',
     'ProficienciesLang': 'Languages: Common\nArmor training: Light\nTools: Thieves\' Tools\nLanguages: Thieves\' Cant, Elvish',
-    'Features and Traits': /Expertise \(Rogue 1\): Stealth, Athletics\nSneak Attack \(Rogue 1\): .*\nThieves' Cant \(Rogue 1\): Elvish\nWeapon Mastery \(Rogue 1\): Dagger, Shortbow$/ });
+    'Features and Traits': /Expertise \(Rogue 1\): Stealth, Athletics\n\nSneak Attack \(Rogue 1\): .*\n\nThieves' Cant \(Rogue 1\): Elvish\n\nWeapon Mastery \(Rogue 1\): Dagger, Shortbow$/ });
   ok(val('Check Box 21') === true, 'Stealth\'s proficiency box is ticked');
 } catch (err) { log('ERROR', err.stack); }
 document.title = 'DONE';
