@@ -59,6 +59,18 @@ const feat = name => [...LU().querySelectorAll('.lu-feat')].find(s => s.querySel
   const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
   typeIn(field('Character name'), 'Arxen Two'); typeIn(field('Player name'), 'Kris'); choose(field('Alignment'), 'Neutral Good');
   const langs = MK().querySelectorAll('.lu-pick select'); choose(langs[0], 'Elvish'); choose(langs[1], 'Draconic');
+  ok(field('Height').placeholder === '5–6 ft' && field('Age').placeholder === '100–750' && field('Weight').placeholder === 'about 120 lb',
+    `an Elf's height, lifespan and weight as placeholders: ${field('Height').placeholder} | ${field('Age').placeholder} | ${field('Weight').placeholder}`);
+  const bodyText = () => MK().querySelector('.mk-body').textContent, chipsNow = () => [...MK().querySelectorAll('.mk-body .chip')].map(c => c.textContent);
+  ok(/Height: Medium about 5–6 ft\./.test(bodyText()) && /Lifespan: adult at about 100, lives to about 750\./.test(bodyText()), 'the height range and the lifespan line');
+  ok(chipsNow().join() === 'Lighter 105 lb,Average 120 lb,Heavier 140 lb' && /Weight for 5'6" \(the middle\)/.test(bodyText()), 'weights for the middle height: ' + chipsNow().join());
+  typeIn(field('Height'), `5' 10"`);
+  ok(chipsNow().join() === 'Lighter 115 lb,Average 135 lb,Heavier 155 lb' && /Weight for 5'10":/.test(bodyText()) && document.activeElement !== MK().querySelector('.mk-body'),
+    'typing a height recalculates them: ' + chipsNow().join());
+  [...MK().querySelectorAll('.mk-body .chip')].find(c => c.textContent === 'Average 135 lb').click();
+  ok(field('Weight').value === '135 lb' && MK().querySelector('.mk-body .chip.on')?.textContent === 'Average 135 lb', 'a weight button fills Weight');
+  typeIn(field('Height'), '178 cm');
+  ok(/Weight for 5'10":/.test(bodyText()), 'centimetres are read too');
   typeIn(field('Age'), '2'); typeIn(field('Ideals'), 'Knowledge');
   step('Review');
   ok(!MK().querySelector('.mk-bad') && /Arxen Two/.test(MK().textContent) && !btnIn(MK(), 'Create sheet').disabled, 'review: nothing missing, Create sheet on');
@@ -67,7 +79,7 @@ const feat = name => [...LU().querySelectorAll('.lu-feat')].find(s => s.querySel
   ok(document.querySelectorAll('#pages .page').length === 3 && !MK(), 'the classic sheet (3 pages) is open, the maker closed');
   expect('written to the classic sheet', { 'CharacterName': 'Arxen Two', 'CharacterName 2': 'Arxen Two', 'PlayerName': 'Kris', 'Background': 'Sage',
     'Race ': 'Elf (High Elf)', 'Alignment': 'Neutral Good', 'XP': '0', 'STRmod': '12', 'STR': '+1', 'WISmod': '17', 'WIS': '+3', 'CHamod': '14', 'CHA': '+2',
-    'ST Wisdom': '+3', 'Arcana': '+2', 'History ': '+2', 'Insight': '+3', 'AC': '14', 'Speed': '30 ft', 'GP': '15', 'Age': '2', 'Ideals': 'Knowledge',
+    'ST Wisdom': '+3', 'Arcana': '+2', 'History ': '+2', 'Insight': '+3', 'AC': '14', 'Speed': '30 ft', 'GP': '15', 'Age': '2', 'Height': '178 cm', 'Weight': '135 lb', 'Ideals': 'Knowledge',
     'Equipment': /^Chain Shirt\nShield\nMace\nHoly Symbol\nPriest's Pack \(Backpack, Blanket/, 'ProficienciesLang': /Languages: Common, Elvish, Draconic\nTools: Calligrapher's Supplies \(Sage\)/,
     'Wpn Name': 'Mace', 'Wpn1 AtkBonus': '+3', 'Wpn1 Damage': '1d6+1 bludgeoning', 'Wpn Name 2': 'Quarterstaff', 'Wpn2 AtkBonus ': '+3' });
   ok(character.str === 12 && character.mods.STR === 1, 'the app reads the score from the oval and the modifier from the big box');

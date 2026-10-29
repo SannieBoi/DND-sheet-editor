@@ -325,9 +325,52 @@ function equipmentStep() {
         weapons.length > room ? h('span', {}, `the sheet has ${room} lines; ${weapons.slice(room).map(w => w.name).join(', ')} only in Equipment`) : null))];
 }
 
+// Height, weight and lifespan (data/bodies.js) for the Details step's placeholders, weight buttons and lifespan line
+const diceRange = v => typeof v === 'number' ? { min: v, avg: v, max: v } : (([n, s]) => ({ min: n, avg: n * (s + 1) / 2, max: n * s }))(v.split('d').map(Number));
+const feetIn = i => { const r = Math.round(i), ft = Math.floor(r / 12); return `${ft}'${r - ft * 12}"`; };
+function inchesOf(v) { // "5'10", "5 ft 10 in", "5.5 ft", "70 in", "178 cm", "1.78 m"; a bare number: feet up to 11, inches up to 99, else cm
+  const s = text(v).toLowerCase().replace(',', '.').replace(/[’′]/g, "'").replace(/[”″]/g, '"');
+  let m;
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*cm$/))) return m[1] / 2.54;
+  if ((m = s.match(/^(\d(?:\.\d+)?)\s*m$/))) return m[1] * 39.37;
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)\.?\s*(?:(\d+(?:\.\d+)?)\s*(?:"|''|in|inch|inches)?\.?)?$/))) return m[1] * 12 + +(m[2] || 0);
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*(?:"|in|inch|inches)$/))) return +m[1];
+  if ((m = s.match(/^\d+(?:\.\d+)?$/))) return +s < 12 ? s * 12 : +s < 100 ? +s : s / 2.54;
+  return null;
+}
+function bodyInfo() { // { sizes: [[size, [min in, max in]]], size (chosen or only), weights(h) -> [[label, lb]], human, age } or null
+  const sp = species();
+  if (!sp) return null;
+  const B = D.bodies, own = B.species[sp.name] || {}, b = own.like ? { ...B.species[own.like], ...own } : own;
+  const table = b.table || B.human, [base, hd, bw, wm] = table, hDice = diceRange(hd), wDice = diceRange(wm), tableSize = sp.size === 'Small' ? 'Small' : 'Medium';
+  const range = sz => b.heights?.[sz] ? b.heights[sz].map(ft => ft * 12) : b.table && sz === tableSize ? [base + hDice.min, base + hDice.max] : B.sizes[sz].map(ft => ft * 12);
+  const options = sp.size ? sp.size.split(' or ') : ['Medium', 'Small'];
+  const avgH = base + hDice.avg, at = k => bw + hDice.avg * k;
+  const spread = wDice.min === wDice.max ? [at(wDice.avg) * .85, at(wDice.avg), at(wDice.avg) * 1.15] : [at(wDice.min), at(wDice.avg), at(wDice.max)];
+  const round = w => w < 50 ? Math.round(w) : Math.round(w / 5) * 5;
+  return { sizes: options.map(sz => [sz, range(sz)]), size: M.size || (options.length === 1 && sp.size ? options[0] : ''), human: !b.table, age: b.age || null,
+    weights: hIn => ['Lighter', 'Average', 'Heavier'].map((label, i) => [label, round(spread[i] * (hIn / avgH) ** 2)]) };
+}
+const rangeText = ([lo, hi]) => lo % 12 || hi % 12 ? `${feetIn(lo)}–${feetIn(hi)}` : `${lo / 12}–${hi / 12} ft`;
+function bodyNotes() {
+  const sp = species(), b = bodyInfo(), d = M.d;
+  if (!b) return h('div', { class: 'mk-body' }, h('p', { class: 'lu-note' }, 'Choose a species to see its usual height, weight and lifespan.'));
+  const shown = b.size ? b.sizes.filter(([sz]) => sz === b.size) : b.sizes;
+  const typed = inchesOf(d.height), range = b.size && b.sizes.find(([sz]) => sz === b.size)[1], hIn = typed || range && (range[0] + range[1]) / 2;
+  return h('div', { class: 'mk-body' },
+    h('p', { class: 'lu-note' }, `Height: ${shown.map(([sz, r]) => `${sz} about ${rangeText(r)}`).join(', ')}`,
+      !sp.size ? ` (${sp.name}'s size isn't in the data)` : !b.size ? ' (choose the size in Species)' : '', '.'),
+    hIn ? h('div', { class: 'chips' }, h('span', { class: 'mk-label' }, `Weight for ${feetIn(hIn)}${typed ? '' : ' (the middle)'}:`),
+      b.weights(hIn).map(([label, lb]) => chip(`${label} ${lb} lb`, text(d.weight) === `${lb} lb`, set(() => { d.weight = `${lb} lb`; })))) : null,
+    hIn && b.human ? h('p', { class: 'lu-note' }, `Weights use a human build: ${sp.name} has no height and weight table.`) : null,
+    h('p', { class: 'lu-note' }, 'Lifespan: ', !b.age ? `not given for ${sp.name}; ask your DM.`
+      : typeof b.age === 'string' ? b.age : `adult at about ${b.age[0]}, lives to about ${b.age[1]}.`));
+}
+
 function detailsStep() {
-  const d = M.d, classic = M.sheet === 'classic', input = (key, label, ph, type = 'text') => h('label', { class: 'mk-field' }, label,
-    h('input', { type, value: d[key], placeholder: ph || '', 'data-keep': key, oninput: e => { d[key] = e.target.value; } }));
+  const d = M.d, classic = M.sheet === 'classic', input = (key, label, ph, type = 'text', after) => h('label', { class: 'mk-field' }, label,
+    h('input', { type, value: d[key], placeholder: ph || '', 'data-keep': key, oninput: e => { d[key] = e.target.value; after?.(); } }));
+  const b = bodyInfo(), range = b?.size && b.sizes.find(([sz]) => sz === b.size)[1], mid = range && b.weights((range[0] + range[1]) / 2)[1][1];
   const area = (key, label, ph) => h('label', { class: 'mk-field wide' }, label,
     h('textarea', { rows: 2, placeholder: ph || '', 'data-keep': key, oninput: e => { d[key] = e.target.value; } }, d[key]));
   const langs = CR.languages, used = d.langs.filter(Boolean);
@@ -342,7 +385,10 @@ function detailsStep() {
         h('optgroup', { label: 'Standard' }, langs.standard.map(l => h('option', { value: l, selected: v === l, disabled: v !== l && used.includes(l) }, l))),
         h('optgroup', { label: 'Rare (if your DM allows)' }, langs.rare.map(l => h('option', { value: l, selected: v === l, disabled: v !== l && used.includes(l) }, l))))))),
     h('div', { class: 'lu-pick' }, pickHead('Appearance'),
-      h('div', { class: 'mk-grid six' }, input('age', 'Age'), input('height', 'Height'), input('weight', 'Weight'), input('eyes', 'Eyes'), input('skin', 'Skin'), input('hair', 'Hair'))),
+      h('div', { class: 'mk-grid six' }, input('age', 'Age', Array.isArray(b?.age) ? `${b.age[0]}–${b.age[1]}` : ''),
+        input('height', 'Height', range ? rangeText(range) : '', 'text', () => win.querySelector('.mk-body')?.replaceWith(bodyNotes())),
+        input('weight', 'Weight', mid ? `about ${mid} lb` : ''), input('eyes', 'Eyes'), input('skin', 'Skin'), input('hair', 'Hair')),
+      bodyNotes()),
     h('div', { class: 'lu-pick' }, pickHead('Personality'),
       h('div', { class: 'mk-grid' }, area('personality', 'Personality traits'), area('ideals', 'Ideals'), area('bonds', 'Bonds'), area('flaws', 'Flaws')),
       area('backstory', 'Backstory'))];

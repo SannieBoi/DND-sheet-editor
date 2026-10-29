@@ -83,6 +83,8 @@ species card drops down what it is about (and its level 1 features, its feat or 
 6. Equipment: your class's and your background's packages (A, B ...) or their gold. It shows your Armor Class, gold
    and which weapons get attack lines. Starting above level 1 you can add the extra money from the rules (your DM's call).
 7. Details: name, alignment, XP, two languages besides Common, appearance and personality (all optional).
+   The Height box shows your species' usual height for its size, the Age box its lifespan. Below them: weight
+   buttons (lighter, average, heavier) worked out for the height you type (feet and inches or cm), and the lifespan.
 8. Review, then "Create sheet": the blank sheet opens, filled in (scores, modifiers, saves, skills, AC, speed,
    equipment, gold, attack lines, languages ...). Then the Level 1 window opens for your class's skills, its level 1
    features, your Origin feat's choices, species traits, spells and Hit Points. Apply it, and if you start higher, a

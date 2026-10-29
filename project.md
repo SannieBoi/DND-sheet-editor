@@ -27,6 +27,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | data/backgrounds-more.js | pushes the other 12 PHB (2024) backgrounds onto `DND.backgrounds` (load right after backgrounds.js), sorted by name; `source`. Feats/skills checked against D&D Beyond's public list; ability scores, tools, equipment from the PHB (paywalled). |
 | data/creation.js | `DND.creation`: standard array (+ by class), point buy, languages (standard/rare), alignments, equipment packs' contents, tool kinds (Artisan's Tools, Musical Instrument, Gaming Set), starting at higher levels. Checked against the Basic Rules 2026-10-04. Classes have `startingEquipment`, backgrounds `equipment` (options A/B(/C): `{ items, gp }`; item = text, `{ choose: [kinds], proficiency }` or `{ same: true }` = the background's tool). |
 | data/summaries.js | loads after blood-hunter.js: sets `summary` (a few lines in our own words: what it is, how it plays) on the 14 classes, the 16 backgrounds and the 72 species with rules (none for `brief` ones). Shown by the maker's ▾ card buttons, Level 1's class cards and the multiclass pick. |
+| data/bodies.js | loads after summaries.js: `DND.bodies` = size heights (Tiny..Large, ft), per species `heights` (2024 "about X-Y ft", free rules + Aasimar), `table` (2014-era random height/weight row: base in, dice, base lb, multiplier), `age` ([adult, lives to] or a sentence), `like`. Used by maker.js Details (see Sheet maker). |
 | data/sheet-2014.js, data/sheet-2024.js | the blank classic (2014, 3 pages) and official 2024 sheets as base64 (`window.BLANK_SHEETS.classic / .official2024`), loaded by maker.js with a script tag only when needed (file:// can't fetch). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
@@ -42,7 +43,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). Our own scrollbars (user, 2026-10-29: the default looked out of place): global `::-webkit-scrollbar` rules (dark red thumb, gold edge, wider on hover, gold while dragged; a brown one inside `.page`), Firefox gets `scrollbar-color` via `@supports not selector(::-webkit-scrollbar)`. Never set `scrollbar-width`/`scrollbar-color` elsewhere (only `none`): in Chromium 121+ either one switches the custom ones off for that box. Pseudo-element rules can't be nested (`&` can't stand for one). Search boxes' × is restyled too. |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (564 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (574 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -175,6 +176,12 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   effect). Replay writes the stored values with `replaying` set, then `snap = null` before refreshing, so no propagation
   runs (the stored boxes are already right). Ctrl+Z/Y only when focus is on a sheet field or nothing typed (other inputs
   keep native undo). History is cleared after a load (auto-filled boxes aren't undoable). 200 steps max.
+- Spells on the sheet (`findSpells`): a box holding just a spell's name, species/lineage spells by character level, and
+  spell names anywhere in the text (`SPELL_RES`), except: `AMBIGUOUS` names (everyday rules words: Light, Shield ...,
+  Darkvision the sense, Aid in "Land's Aid", Jump, Divination the school, Creation, Bane), a name inside a longer spell
+  name (Mass Cure Wounds is not Cure Wounds), and text not reached yet (`reachedText`: the rest of a sentence after
+  "at/from (character|<Class>) level N" or "; N:" counts once that level is reached; user found a Tabaxi 1 could cast
+  Darkvision, and a Life Cleric 3's feature line made its level 5-9 domain spells castable).
 - Suggestions (`openSuggest`): the list opens under the box, or above it when it would run off the bottom of the window
   and there is more room above.
 - Unsaved changes: `stamp()` = edits that differ from the PDF + notes + sheetState; compared with the stamp at load / last
@@ -353,6 +360,14 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   (dialog.js aboutCard) dropping down data/summaries.js's `summary` + class: level 1 features and subclass level;
   background: its feat and the feat's summary; species: every trait with its text (brief: only the book's name). Opening
   it doesn't choose the card. Level up shows the same on Level 1's class cards and the summary under the multiclass picks.
+- Height / weight / lifespan (user, 2026-10-29; Lifestyle was looked at and dropped): Details' Height placeholder = the
+  chosen size's range (species `heights`, else its `table` for its own size, else the plain size range), Age placeholder =
+  the lifespan, a `.mk-body` block under the boxes: height line, weight chips Lighter/Average/Heavier for the typed height
+  (`inchesOf`: ft/in, cm, m; none typed = the middle of the range) = the table's min/avg/max multiplier scaled by height
+  squared (constant multiplier: x0.85 / x1.15; no table = a human build, said so), and the lifespan line. Typing a height
+  redraws only `.mk-body`. Tables and ages are from Claude's knowledge of the 2014-era books; the table rows were checked
+  against a public list of D&D Beyond's height/weight rows (2026-10-29); the ages weren't checked (species without a
+  confident age have none: "ask your DM").
 - The button lives in #pages, so it disappears once a sheet is open (F5 to make another).
 
 ## Level up (levelup.js) — decisions
@@ -400,6 +415,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Tough: +2 per level on the sheet, +2 x level when taken; Boon of Fortitude +40; feat `grants` go through collect().
 
 ## Testing
+- The Bash tool's sandbox stops headless Edge (empty output): run the tests from the PowerShell tool.
 - `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|subsweep|subclasses|species|speciessweep|heal|feats|concentration|rest|maker|beyond|ui`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
@@ -416,7 +432,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - maker.test.js: the button, both sheets with pictures, an Elf Cleric on the classic sheet (array swap, equipment/AC,
   details, every box written, Level 1 with skills, Divine Order, Magic Initiate (Wizard), lineage ability, spells) and a
   Human Monk 3 on the official sheet (PHB background + tool, size, point buy, 4d6 rolls, Monk tool -> 'mc:tools',
-  Versatile feat, the Level 2 / Level 3 chain).
+  Versatile feat, the Level 2 / Level 3 chain). The Elf's Details: height/age/weight placeholders, weight chips by typed height.
 - beyond.test.js: out-of-reach feats/features/tags/species traits, the question (tick boxes, Keep, Ignore, Escape), the
   marks, the roll-log line, Undo/Redo, asking only after you leave the box, the PDF, Fighting Style (Paladin 1 vs 2), no
   class = no check, windows opening at the top. A test that loads a sheet with out-of-reach things must answer the question
@@ -431,7 +447,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
   Hunter level 1. subsweep.test.js: every non-free subclass (67) picked at its level, then levelled through every level
   where it gains something (all levels for casters/savants), every pick filled; no errors, reads back, nothing beyond
   the rules (~40 s).
-- species.test.js: species data counts, the maker's species step (cards, search by name/book, names-only warning, Tortle /
+- species.test.js: species data counts, spell names in trait/feature text (Darkvision, later levels, longer names), the maker's species step (cards, search by name/book, names-only warning, Tortle /
   Warforged AC), a Githyanki Fighter's first level (ability chips, trait lines, Mage Hand, Jump at 3), Kobold Legacy's
   `if` parts, Hare-Trigger initiative, Tabaxi claws, Bugbear/Giff/Goliath switches, Half-Orc crit, Rest tab species uses,
   "Elf (Shadowmoor Elf)", Tireless not out of reach. speciessweep.test.js: every species with rules as a new Fighter,

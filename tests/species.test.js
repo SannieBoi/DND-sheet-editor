@@ -170,6 +170,16 @@ const spellLines = () => [...document.querySelectorAll('[data-field^="Spells "]'
   attackWith('Unarmed Strike');
   forced = [15, 4]; rbtn('Attack').click(); await wait(20);
   ok(lastRoll().querySelector('.dmg .die').classList.contains('d6') && /slashing/i.test(lastRoll().textContent), "Tabaxi: Unarmed Strike with Cat's Claws, 1d6 slashing");
+  // spell names in trait and feature text: the Darkvision sense, later levels, names inside longer names
+  const knownNow = () => window.character.spells.map(x => x.spell.name);
+  await loadSheet({ race: 'Tabaxi', cls: 'Fighter 1', features: "Darkvision (Tabaxi): Darkvision 60 ft.\n\nCat's Talent (Tabaxi): Proficiency in Perception and Stealth." });
+  ok(!knownNow().includes('Darkvision'), "Tabaxi: the Darkvision trait isn't the Darkvision spell: " + knownNow().join());
+  await loadSheet({ race: 'Fire Genasi', cls: 'Cleric 3', features: 'Fire Legacy (Fire Genasi): You know Produce Flame. From character level 3 you can cast Burning Hands, and from level 5 Flame Blade, each once per Long Rest.\n\n' +
+    'Life Domain Spells (Cleric 3): Always prepared at Cleric level 3: Aid, Bless, Cure Wounds, Lesser Restoration; 5: Mass Healing Word, Revivify; 7: Aura of Life, Death Ward.\n\n' +
+    "Notes: my friend's Land's Aid heals. Greater Invisibility is on my wish list." }); // not a line starting with a feature (that asks: Beyond the rules)
+  ok(['Produce Flame', 'Burning Hands', 'Bless', 'Cure Wounds', 'Lesser Restoration', 'Greater Invisibility'].every(n => knownNow().includes(n)), 'what level 3 has reached counts: ' + knownNow().join());
+  ok(['Flame Blade', 'Mass Healing Word', 'Healing Word', 'Revivify', 'Aura of Life', 'Death Ward'].every(n => !knownNow().includes(n)), 'the spells of levels 5 and 7 do not yet');
+  ok(!knownNow().includes('Invisibility') && !knownNow().includes('Aid'), "Greater Invisibility isn't Invisibility too; Aid only from a box of its own (Land's Aid)");
   await loadSheet({ race: 'Bugbear', cls: 'Fighter 1' });
   attackWith('Longsword');
   ok(rbtn('Surprise Attack 2d6') && !rbtn('Surprise Attack 2d6').classList.contains('on'), 'Bugbear: a Surprise Attack 2d6 switch, off to start');

@@ -144,8 +144,9 @@ for (const [ab, full] of Object.entries(D.rules.abilities)) {
 // that are also everyday rules words ("Light Armor", "Shield", "Fly Speed", the Slow mastery ...).
 const SPELL_BY_NORM = new Map(D.spells.map(s => [norm(s.name), s]));
 const AMBIGUOUS = new Set(['Light', 'Shield', 'Fly', 'Slow', 'Haste', 'Command', 'Message', 'Heal', 'Harm', 'Sleep', 'Wish',
-  'Resistance', 'Mending', 'Silence', 'Alarm', 'Symbol', 'Teleport', 'Dream', 'Weird', 'Confusion', 'Guidance', 'Darkness']);
-const SPELL_RES = D.spells.filter(s => !AMBIGUOUS.has(s.name)).map(s => [s, new RegExp('\\b' + escapeRe(s.name) + '\\b')]);
+  'Resistance', 'Mending', 'Silence', 'Alarm', 'Symbol', 'Teleport', 'Dream', 'Weird', 'Confusion', 'Guidance', 'Darkness',
+  'Darkvision', 'Aid', 'Jump', 'Divination', 'Creation', 'Bane']); // the sense, "Land's Aid", "High Jump", the school, "Words of Creation", the god
+const SPELL_RES = D.spells.filter(s => !AMBIGUOUS.has(s.name)).map(s => [s, new RegExp('\\b' + escapeRe(s.name) + '\\b', 'g')]);
 const spellNamed = text => SPELL_BY_NORM.get(norm(String(text ?? '').replace(/\(.*?\)/g, ''))) || null;
 
 // "2d6+3" -> { n: 2, d: 6, flat: 3 }; "5" -> { n: 0, d: 0, flat: 5 }
@@ -431,10 +432,30 @@ function pactOf(classes) {
   return ps ? casterOf(ps).pact[ps.level - 1] : null;
 }
 
+// Rules text names spells that only come at a later level: "Always prepared at Cleric level 3: Aid, Bless; 5: Revivify ..."
+// and "From character level 3 you can cast Jump, and from level 5 Misty Step". The rest of a sentence after "level N" (or
+// "; N:") is left out until the character, or the class it names, has that level. No class or level read = left as it is.
+function reachedText(text) {
+  if (!character.classes.length && !character.level) return text;
+  const levelOf = who => !who || /^character$/i.test(who) ? character.level || 1
+    : character.classes.find(c => classRe(c.key).test(who))?.level || 0;
+  return text.split('\n').map(line => {
+    let out = '', last = 0, gate = 0, who = null;
+    for (const m of line.matchAll(/\b(?:[Aa]t|[Ff]rom) (?:(character|[A-Z][a-z]+(?: [A-Z][a-z]+)?) )?level (\d+)\b|;\s*(\d+):|\.(?=\s|$)/g)) {
+      out += (gate > levelOf(who) ? ' | ' : line.slice(last, m.index)) + m[0];
+      last = m.index + m[0].length;
+      if (m[2]) { gate = +m[2]; who = m[1] || null; } else if (m[3]) gate = +m[3]; else { gate = 0; who = null; }
+    }
+    return out + (gate > levelOf(who) ? '' : line.slice(last));
+  }).join('\n');
+}
+
 function findSpells(allText) {
   const found = new Map(), add = (spell, from) => { if (spell && !found.has(spell.name)) found.set(spell.name, { spell, from }); };
   for (const v of Object.values(fields)) if (typeof v === 'string' && v.length < 40) add(spellNamed(v), 'sheet');
-  for (const [s, re] of SPELL_RES) if (re.test(allText)) add(s, 'sheet');
+  // a name inside a longer one is that one ("Mass Cure Wounds" is not Cure Wounds)
+  const text = reachedText(allText), hits = SPELL_RES.flatMap(([s, re]) => [...text.matchAll(re)].map(m => [m.index, m.index + m[0].length, s]));
+  for (const [a, b, s] of hits) if (!hits.some(([a2, b2]) => a2 <= a && b2 >= b && b2 - a2 > b - a)) add(s, 'sheet');
   const lineage = character.lineage, sp = character.speciesData;
   for (const t of lineage?.traits || []) if (t.lvl <= (character.level || 1)) add(spellNamed(t.name), sp.name);
   for (const [lvl, names] of Object.entries(sp?.spells || {})) if (+lvl <= (character.level || 1)) for (const n of names) add(spellNamed(n), sp.name);

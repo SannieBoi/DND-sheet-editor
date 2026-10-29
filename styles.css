@@ -3913,6 +3913,15 @@ body.roller-open main {
     }
 }
 
+.mk-body .chips {
+    margin-top: 8px;
+}
+
+.mk-label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
 .mk-review {
     margin: 10px 0 0;
     padding: 0;
