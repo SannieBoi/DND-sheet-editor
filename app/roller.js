@@ -105,18 +105,55 @@ function beyondLine(names) {
 const ADEPT = ['acid', 'cold', 'fire', 'lightning', 'thunder'];
 const adeptTypes = () => !hasFeat('Elemental Adept') ? [] : [...Object.values(C).filter(v => typeof v === 'string').join('\n')
   .matchAll(/Elemental Adept\b[:\s(]*([^()\n]*)/g)].flatMap(m => ADEPT.filter(t => new RegExp(`\\b${t}\\b`, 'i').test(m[1])));
-// Unarmed Strike die from Unarmed Fighting (d6, d8 with nothing in hand), Tavern Brawler (d4) or Martial Arts: the biggest
+// Unarmed Strike die from Unarmed Fighting (d6, d8 with nothing in hand), Tavern Brawler (d4), Martial Arts or a species'
+// natural weapon (Talons, Claws, Horns ...): the biggest
 function unarmedDie(o) {
-  const sides = [hasFeat('Unarmed Fighting') ? (o.bare ?? true ? 8 : 6) : 0, hasFeat('Tavern Brawler') ? 4 : 0, lvlRow('monk')?.martialArtsDie || 0];
+  const lycan = (C.classes || []).find(x => x.key === 'bloodhunter' && x.sub?.name === 'Order of the Lycan'); // hybrid form: Predatory Strikes
+  const sides = [hasFeat('Unarmed Fighting') ? (o.bare ?? true ? 8 : 6) : 0, hasFeat('Tavern Brawler') ? 4 : 0, lvlRow('monk')?.martialArtsDie || 0,
+    lycan && o['rider:Hybrid form'] ? (lycan.level >= 11 ? 8 : 6) : 0, C.speciesData?.unarmed?.die || 0];
   const best = Math.max(...sides);
   return best ? '1d' + best : null;
 }
-// Cleric level of a Life Domain Cleric (0 otherwise): the subclass or its features are named somewhere on the sheet
+// Cleric level of a Life Domain Cleric (0 otherwise): the sheet names the subclass (script.js subclassOf) or its features
 function lifeCleric() {
   const c = (C.classes || []).find(x => x.key === 'cleric');
   if (!c || c.level < 3) return 0;
   const text = Object.values(window.fields || {}).filter(v => typeof v === 'string').join('\n');
-  return /\b(Life Domain|Disciple of Life)\b/i.test(text) || /\bLife\b/i.test(`${C.classLevel ?? ''} ${C.subclass ?? ''}`) ? c.level : 0;
+  return c.sub?.name === 'Life Domain' || !c.sub && /\b(Life Domain|Disciple of Life)\b/i.test(text) ? c.level : 0;
+}
+// Extra damage on a hit that a subclass gives (subclasses.js riders), for the classes the character has at that level:
+// [{ id, name, part (a damage part), on (on by default), note }]. dice: by class level, or 'martialArts'; mod: an ability
+// modifier added; level: that part of the class level added; flat: a number by class level.
+function subRiders(w, melee) {
+  const out = [];
+  for (const c of C.classes || []) {
+    for (const r of c.sub?.riders || []) {
+      if (c.level < (r.from || 3) || r.unarmed && !w?.unarmed || r.melee && !melee) continue;
+      const die = r.dice === 'martialArts' ? '1d' + (lvlRow('monk')?.martialArtsDie || 6) : typeof r.dice === 'object' ? byLevel(r.dice, c.level) : r.dice;
+      const p = die ? parseDice(die) : { n: 0, d: 0, flat: 0 };
+      p.flat += (r.mod ? C.mods?.[r.mod] ?? 0 : 0) + (r.level ? Math.floor(c.level * r.level) : 0) + (typeof r.flat === 'object' ? byLevel(r.flat, c.level) : r.flat || 0);
+      out.push({ id: 'rider:' + r.name, name: r.name, on: !!r.on, note: r.note, part: { label: r.name, ...p, type: r.type } });
+    }
+  }
+  // the species' (Surprise Attack, Astral Spark, Fury of the Small, a Goliath's Fire's Burn ...), from their character level
+  for (const r of C.speciesData?.riders || []) {
+    if ((C.level || 1) < (r.from || 1) || r.lineage && !C.lineage?.name.endsWith(r.lineage) || r.melee && !melee || r.weapon && (!w || w.unarmed)) continue;
+    const p = r.dice ? parseDice(r.dice) : { n: 0, d: 0, flat: 0 };
+    p.flat += r.pb ? C.profBonus || 2 : 0;
+    out.push({ id: 'rider:' + r.name, name: r.name, on: !!r.on, note: r.note, part: { label: r.name, ...p, type: r.type } });
+  }
+  return out;
+}
+const byLevel = (map, l) => Object.entries(map).reduce((v, [k, x]) => +k <= l ? x : v, null);
+// Blood Hunter Crimson Rites the sheet names ("Rite of the Flame" ...), each with its damage type; the Ghostslayer's Rite
+// of the Dawn comes with the order
+const RITES = { Flame: 'fire', Frozen: 'cold', Storm: 'lightning', Dead: 'necrotic', Oracle: 'psychic', Roar: 'thunder', Dawn: 'radiant' };
+function rites() {
+  const bh = (C.classes || []).find(x => x.key === 'bloodhunter');
+  if (!bh || bh.level < 2) return [];
+  const text = sheetText();
+  return Object.entries(RITES).filter(([n]) => new RegExp(`\\bRite of the ${n}\\b`, 'i').test(text) || n === 'Dawn' && bh.sub?.name === 'Order of the Ghostslayer')
+    .map(([n, type]) => ({ name: 'Rite of the ' + n, type }));
 }
 // Life Domain healing with a spell slot (not temporary HP): Disciple of Life adds 2 + the slot's level (level 3),
 // Supreme Healing makes the healing dice count as their maximum (level 17)
@@ -194,7 +231,7 @@ function attackSetup(item, o) {
   const w = item.weapon, sc = C.spellcasting, tier = M.cantripTier(C.level || 1);
   const casting = o.trueStrike || o.shillelagh ? { ability: sc.ability, mod: sc.mod } : null;
   const die = o.shillelagh ? ['1d8', '1d10', '1d12', '2d6'][tier - 1] : w?.unarmed ? unarmedDie(o) : null;
-  const a = w && M.weaponAttack(w, item.magic, { twoHanded: o.twoHanded, casting, die });
+  const a = w && M.weaponAttack(w, item.magic, { twoHanded: o.twoHanded, casting, die, type: w.unarmed ? C.speciesData?.unarmed?.type : null });
   const sheetHit = parseHit(item.sheetBonus), sheetDmg = parseDamageText(item.sheetDamage, w?.dmg);
   let toHit, parts, source;
   const used = []; // the feats this attack uses (beyondLine)
@@ -239,6 +276,7 @@ function attackSetup(item, o) {
   if (w && melee && hasFeat('Charger') && toggle('charge', 'Charge +1d8 (moved 10 ft straight)')) { extras.push({ label: 'Charger', n: 1, d: 8, flat: 0, type }); used.push('Charger'); }
   if (w?.unarmed && hasFeat('Unarmed Fighting')) { toggle('bare', 'No weapon or Shield in hand (d8)', { on: o.bare ?? true }); used.push('Unarmed Fighting'); }
   if (parts[0] && hasFeat('Piercer') && type === 'piercing') parts[0].critExtra = 1;
+  if (parts[0] && w && melee && !w.unarmed && C.speciesData?.critExtraMelee) parts[0].critExtra = (parts[0].critExtra || 0) + C.speciesData.critExtraMelee; // Savage Attacks
   if (parts[0] && w?.unarmed && hasFeat('Tavern Brawler')) parts[0].reroll1 = true;
   const note = (feat, text) => { if (hasFeat(feat)) { notes.push([feat, text]); used.push(feat); } };
   if (w?.kind === 'ranged') note('Sharpshooter', 'ignore Half and Three-Quarters Cover; no Disadvantage at long range or with an enemy within 5 ft.');
@@ -257,6 +295,24 @@ function attackSetup(item, o) {
     const sa = parseDice(rogue.sneakAttack);
     if (toggle('sneak', `Sneak Attack ${diceText(sa)}`)) extras.push({ label: 'Sneak Attack', ...sa, type });
   }
+  // Blood Hunter: a Crimson Rite on the weapon adds a hemocraft die of its type; Brand of Sundering (Ghostslayer 11) one
+  // more, Rite of the Dawn one more against Undead, Blood Curse of the Marked one more this turn
+  const bh = (C.classes || []).find(x => x.key === 'bloodhunter'), hemo = lvlRow('bloodhunter')?.hemocraftDie;
+  let riteOn = false;
+  for (const r of rites()) {
+    if (!toggle('rite:' + r.name, `${r.name} +1d${hemo} ${r.type}`)) continue;
+    riteOn = true;
+    extras.push({ label: r.name, n: bh.sub?.name === 'Order of the Ghostslayer' && bh.level >= 11 ? 2 : 1, d: hemo, flat: 0, type: r.type });
+    if (r.name === 'Rite of the Dawn' && toggle('dawnUndead', `Against Undead +1d${hemo}`)) extras.push({ label: 'Rite of the Dawn (Undead)', n: 1, d: hemo, flat: 0, type: r.type });
+  }
+  if (riteOn && /Blood Curse of the Marked/i.test(sheetText()) && toggle('marked', `Marked target +1d${hemo}`)) extras.push({ label: 'Blood Curse of the Marked', n: 1, d: hemo, flat: 0, type: '' });
+  // subclass riders (Divine Fury, Psionic Strike, Dreadful Strike ...); the Lycan's hybrid form adds to unarmed attack rolls too
+  for (const r of subRiders(w, melee)) {
+    const on = o[r.id] ?? r.on;
+    toggle(r.id, `${r.name} ${r.part.n ? diceText(r.part) : fmt(r.part.flat)}${r.part.type ? ' ' + r.part.type : ''}`, { on, title: r.note });
+    if (on) extras.push({ ...r.part, type: r.part.type || type });
+  }
+  if (bh?.sub?.name === 'Order of the Lycan' && bh.level >= 7 && w?.unarmed && o['rider:Hybrid form']) toHit += byLevel({ 7: 1, 11: 2, 18: 3 }, bh.level);
   const riders = [];
   for (const { spell: s } of C.spells || []) {
     if (!s.rider) continue;

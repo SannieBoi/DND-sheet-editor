@@ -10,7 +10,9 @@ DND.creation = {
   standardArrayByClass: {
     barbarian: [15, 13, 14, 10, 12, 8], bard: [8, 14, 12, 13, 10, 15], cleric: [14, 8, 13, 10, 15, 12], druid: [8, 12, 14, 13, 15, 10],
     fighter: [15, 14, 13, 8, 10, 12], monk: [12, 15, 13, 10, 14, 8], paladin: [15, 10, 13, 8, 12, 14], ranger: [12, 15, 13, 8, 14, 10],
-    rogue: [12, 15, 13, 14, 10, 8], sorcerer: [10, 13, 14, 8, 12, 15], warlock: [8, 14, 13, 12, 10, 15], wizard: [8, 12, 13, 15, 14, 10]
+    rogue: [12, 15, 13, 14, 10, 8], sorcerer: [10, 13, 14, 8, 12, 15], warlock: [8, 14, 13, 12, 10, 15], wizard: [8, 12, 13, 15, 14, 10],
+    // not in the Basic Rules table; our suggestion from the classes' main abilities (the Blood Hunter's Quick Build: STR, then INT and CON)
+    artificer: [8, 13, 14, 15, 12, 10], bloodhunter: [15, 12, 13, 14, 10, 8]
   },
   // Point Cost: 27 points, scores 8-15
   pointBuy: { budget: 27, cost: { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 } },

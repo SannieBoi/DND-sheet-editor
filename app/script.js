@@ -214,7 +214,7 @@ const FEATURE_BOXES = ['features', 'features2', 'featsText', 'speciesTraits'];
 // Class and subclass features by name: { name, by: { classKey: the lowest class level it comes at } }
 const CLASS_FEATURES = new Map();
 for (const [key, c] of Object.entries(D.classes)) {
-  for (const f of [...c.features, ...c.subclass.features]) {
+  for (const f of [...c.features, ...(c.subclasses || [c.subclass]).flatMap(s => s.features)]) {
     if (/Subclass$|^(Ability Score Improvement|Epic Boon)$/.test(f.name)) continue; // feats are checked as feats
     const e = CLASS_FEATURES.get(norm(f.name)) || { name: f.name, by: {} };
     e.by[key] = Math.min(e.by[key] ?? 20, f.lvl);
@@ -244,6 +244,7 @@ function featureClaims() {
   const c = character, out = new Map(), have = Object.fromEntries(c.classes.map(x => [x.key, x.level]));
   const cname = k => D.classes[k].name, mine = c.classes.map(x => `${x.name} ${x.level}`).join(' / ');
   const sp = c.speciesData, later = new Map((sp?.features || []).filter(f => c.level && f.lvl > c.level).map(f => [norm(f.name), f]));
+  const ownTraits = new Set((sp?.features || []).filter(f => !later.has(norm(f.name))).map(f => norm(f.name))); // the Warforged's Tireless isn't the Ranger's
   for (const key of FEATURE_BOXES) {
     const field = fieldOf[key], text = field && currentValue(field);
     if (typeof text !== 'string') continue;
@@ -252,7 +253,7 @@ function featureClaims() {
       const lead = line.match(/^[\s•*·-]*/)[0].length, head = line.slice(lead).split(/\s*(?:[:([]|\s[-–]\s)/)[0].trim();
       const rest = line.slice(lead + head.length), at = start + lead + head.length;
       start += line.length + 1;
-      if (!head || FEAT_NAMES.has(norm(head))) continue;
+      if (!head || FEAT_NAMES.has(norm(head)) || ownTraits.has(norm(head))) continue;
       const e = CLASS_FEATURES.get(norm(head)), owners = e ? Object.entries(e.by) : [];
       let why = null;
       if (e && c.classes.length) {
@@ -278,16 +279,38 @@ function featureClaims() {
   return [...out.values()];
 }
 
+// A class named in text: its key or its name, "Blood Hunter" also as "Bloodhunter"
+const classRe = key => new RegExp(`\\b(${key}|${D.classes[key].name.replace(/ /g, '[\\s-]*')})\\b`, 'i');
+
 // "Fighter 5", "Rogue 3 / Wizard 2", "Level 4 Cleric" -> [{ key, name, level }]
 function parseClasses(text, fallbackLevel) {
   const out = [];
   for (const part of String(text ?? '').split(/[/,;&+]|\band\b/i)) {
-    const key = Object.keys(D.classes).find(k => new RegExp('\\b' + k + '\\b', 'i').test(part));
+    const key = Object.keys(D.classes).find(k => classRe(k).test(part));
     const n = part.match(/\d+/);
     if (key) out.push({ key, name: D.classes[key].name, level: n ? Math.min(20, Math.max(1, +n[0])) : null });
   }
   for (const c of out) c.level ??= out.length === 1 && fallbackLevel || 1;
   return out;
+}
+
+// Which subclass of a class the sheet names -> its data, or null. Looked for in the class's part of the Class box
+// ("Fighter 3 (Battle Master)"), then in the Subclass box, by its name or short name ("Zealot", "Life"; class names are
+// taken out first, so the Ranger's Hunter isn't found in "Blood Hunter"); the longest match wins. Failing that, its full
+// name on a feature line, as the level-up writes it ("Frenzy (Path of the Berserker): ...").
+const SUB_PREFIX = /^(Path|College|Circle|Oath|Warrior|Order) of (the )?| (Domain|Patron|Sorcery)$/g;
+const subWords = s => [s.name, ...(s.short || s.name.replace(SUB_PREFIX, '')).split('|')];
+function subclassOf(key, classText = character.classLevel, subText = character.subclass, featureText = `${character.features ?? ''}\n${character.features2 ?? ''}`) {
+  const c = D.classes[key], subs = c.subclasses || [c.subclass];
+  const strip = t => Object.keys(D.classes).reduce((s, k) => s.replace(new RegExp(classRe(k).source, 'gi'), ' '), String(t ?? ''));
+  const longest = text => {
+    let best = null, len = 0;
+    for (const s of subs) for (const w of subWords(s)) if (w.length > len && new RegExp(`\\b${escRe(w)}\\b`, 'i').test(text)) { best = s; len = w.length; }
+    return best;
+  };
+  const part = String(classText ?? '').split(/[/,;&+]|\band\b/i).find(p => classRe(key).test(p)) || '';
+  return longest(strip(part)) || longest(strip(subText)) ||
+    subs.find(s => new RegExp(`\\(${escRe(s.name)}[),:]|${s.name.includes(' ') ? `\\b${escRe(s.name)}\\b` : '(?!)'}`, 'i').test(featureText)) || null;
 }
 
 const abilityMod = ab => {
@@ -308,7 +331,7 @@ function isProficient(w) {
 // To-hit and damage for a weapon, following DND.rules.weaponAttack. Situational extras (Rage, Sneak Attack,
 // Smites) are left out because they don't belong in the sheet's damage box.
 // opts: twoHanded (use the Versatile die), casting ({ ability, mod } for True Strike / Shillelagh), die (replaces the damage die)
-function weaponAttack(w, magic = 0, { twoHanded = false, casting = null, die = null } = {}) {
+function weaponAttack(w, magic = 0, { twoHanded = false, casting = null, die = null, type: dmgType = null } = {}) {
   const str = abilityMod('str'), dex = abilityMod('dex');
   const monk = character.classes.find(c => c.key === 'monk');
   const monkWeapon = monk && w.kind === 'melee' && (w.category === 'simple' || w.props.includes('light'));
@@ -321,7 +344,7 @@ function weaponAttack(w, magic = 0, { twoHanded = false, casting = null, die = n
     const mDie = D.classes.monk.levels[monk.level - 1].martialArtsDie, cur = dice.match(/^1d(\d+)$/);
     if (dice === '1' || cur && +cur[1] < mDie) dice = '1d' + mDie;
   }
-  const dmgMod = mod + magic, type = w.dmg;
+  const dmgMod = mod + magic, type = dmgType || w.dmg;
   const damage = /^\d+$/.test(dice) ? String(Math.max(0, +dice + dmgMod)) : dice + (dmgMod ? fmt(dmgMod) : '');
   const toHit = mod + (proficient ? character.profBonus : 0) + magic + archery;
   return {
@@ -333,9 +356,9 @@ function weaponAttack(w, magic = 0, { twoHanded = false, casting = null, die = n
 // Spell attack bonus and save DC. The sheet's own boxes win; otherwise the first spellcasting class decides, and a
 // character without one (species spells) uses the best of INT/WIS/CHA, as the species rules allow.
 function spellcasting() {
-  const c = character, caster = c.classes.find(x => D.classes[x.key].spellcasting);
+  const c = character, caster = c.classes.find(casterOf);
   const named = Object.entries(D.rules.abilities).find(([ab, full]) => new RegExp(`^(${ab}|${full})$`, 'i').test(String(c.spellAbility ?? '').trim()));
-  const ability = named ? named[0] : caster ? D.classes[caster.key].spellcasting.ability
+  const ability = named ? named[0] : caster ? casterOf(caster).ability
     : ['INT', 'WIS', 'CHA'].reduce((a, b) => abilityMod(b.toLowerCase()) > abilityMod(a.toLowerCase()) ? b : a);
   const mod = abilityMod(ability.toLowerCase());
   return { class: caster?.name ?? null, ability, mod,
@@ -372,31 +395,49 @@ function spellRoll(s, slot = s.level) {
 // Champion Fighters score a critical hit on 19 (level 3) or 18 (level 15)
 function critRange() {
   const f = character.classes.find(x => x.key === 'fighter');
-  if (!f || !/champion/i.test(`${character.classLevel ?? ''} ${character.subclass ?? ''}`)) return 20;
+  if (f?.sub?.name !== 'Champion') return 20;
   return f.level >= 15 ? 18 : f.level >= 3 ? 19 : 20;
 }
 
-// Spell slots per level (index 0 = level 1) of a set of classes [{ key, level }]: one class uses its own table, two or more
-// casters add up their caster levels (half casters round up); Warlock Pact Magic slots are added on top at their level.
+// A class's spellcasting [{ key, level, sub }]: the class's own, or its subclass's (Eldritch Knight, Arcane Trickster and
+// Warrior of the Mystic Arts are third casters, the Blood Hunter's Profane Soul casts with Pact Magic)
+const casterOf = c => D.classes[c.key].spellcasting || c.sub?.spellcasting || null;
+
+// Spell slots per level (index 0 = level 1) of a set of classes [{ key, level, sub }]: one class uses its own table, two
+// or more casters add up their caster levels (half casters round up, third casters round down); Pact Magic slots are
+// added on top at their level.
 function slotsFor(classes) {
-  const casters = classes.filter(c => D.classes[c.key].spellcasting && D.classes[c.key].spellcasting.type !== 'pact');
+  const casters = classes.filter(c => casterOf(c) && casterOf(c).type !== 'pact');
   let slots = Array(9).fill(0);
-  if (casters.length === 1) slots = [...D.classes[casters[0].key].levels[casters[0].level - 1].spells.slots];
-  else if (casters.length > 1) {
-    const cl = casters.reduce((t, c) => t + (D.classes[c.key].spellcasting.type === 'half' ? Math.ceil(c.level / 2) : c.level), 0);
-    slots = [...D.rules.multiclass.slotsByCasterLevel[Math.min(20, cl) - 1]];
+  if (casters.length === 1) {
+    const c = casters[0], sc = casterOf(c);
+    slots = [...(sc.slots ? sc.slots[c.level - 1] : D.classes[c.key].levels[c.level - 1].spells.slots)];
+  } else if (casters.length > 1) {
+    const cl = casters.reduce((t, c) => {
+      const type = casterOf(c).type;
+      return t + (type === 'half' ? Math.ceil(c.level / 2) : type === 'third' ? Math.floor(c.level / 3) : c.level);
+    }, 0);
+    if (cl > 0) slots = [...D.rules.multiclass.slotsByCasterLevel[Math.min(20, cl) - 1]];
   }
-  const w = classes.find(c => D.classes[c.key].spellcasting?.type === 'pact'), pact = w && D.classes[w.key].levels[w.level - 1].spells.pact;
-  if (pact) slots[pact.slotLevel - 1] += pact.slots;
+  const pact = pactOf(classes);
+  if (pact?.slots) slots[pact.slotLevel - 1] += pact.slots;
   return slots;
+}
+// Pact Magic slots { slots, slotLevel }: the Warlock's, a third of the Profane Soul's Blood Hunter levels added to the
+// Warlock level; without Warlock levels the Profane Soul's own table
+function pactOf(classes) {
+  const w = classes.find(c => c.key === 'warlock'), ps = classes.find(c => c.key !== 'warlock' && casterOf(c)?.type === 'pact');
+  if (w) return D.classes.warlock.levels[Math.min(20, w.level + (ps ? Math.floor(ps.level / 3) : 0)) - 1].spells.pact;
+  return ps ? casterOf(ps).pact[ps.level - 1] : null;
 }
 
 function findSpells(allText) {
   const found = new Map(), add = (spell, from) => { if (spell && !found.has(spell.name)) found.set(spell.name, { spell, from }); };
   for (const v of Object.values(fields)) if (typeof v === 'string' && v.length < 40) add(spellNamed(v), 'sheet');
   for (const [s, re] of SPELL_RES) if (re.test(allText)) add(s, 'sheet');
-  const lineage = character.lineage;
-  for (const t of lineage?.traits || []) if (t.lvl <= (character.level || 1)) add(spellNamed(t.name), character.speciesData.name);
+  const lineage = character.lineage, sp = character.speciesData;
+  for (const t of lineage?.traits || []) if (t.lvl <= (character.level || 1)) add(spellNamed(t.name), sp.name);
+  for (const [lvl, names] of Object.entries(sp?.spells || {})) if (+lvl <= (character.level || 1)) for (const n of names) add(spellNamed(n), sp.name);
   return [...found.values()].sort((a, b) => a.spell.level - b.spell.level || a.spell.name.localeCompare(b.spell.name));
 }
 
@@ -404,6 +445,7 @@ function findSpells(allText) {
 function readGameData() {
   const c = character;
   c.classes = parseClasses(c.classLevel, c.level);
+  for (const x of c.classes) x.sub = subclassOf(x.key);
   c.level = c.classes.reduce((t, x) => t + x.level, 0) || (typeof c.level === 'number' ? c.level : null);
   if (typeof c.profBonus !== 'number') c.profBonus = D.rules.proficiencyBonusByLevel[Math.min(20, c.level || 1) - 1];
   const allText = Object.values(fields).filter(v => typeof v === 'string').join('\n');
@@ -439,7 +481,8 @@ function readGameData() {
     const v = c['save:' + ab], sheet = typeof v === 'number';
     return { ability: ab, name: full, fromSheet: sheet, mod: sheet ? v : c.mods[ab] + (saveProfs.includes(ab) ? c.profBonus : 0) };
   });
-  c.initiativeMod = typeof c.initiative === 'number' ? c.initiative : c.mods.DEX + (c.feats.includes('Alert') ? c.profBonus : 0);
+  const pbInit = c.feats.includes('Alert') || c.speciesData?.features.some(f => f.grants?.initiativeBonus === 'PB'); // Alert, Hare-Trigger
+  c.initiativeMod = typeof c.initiative === 'number' ? c.initiative : c.mods.DEX + (pbInit ? c.profBonus : 0);
 }
 
 // Weapon lines: a text field whose name mentions a weapon/attack is the weapon's name, and the boxes to its right
@@ -544,7 +587,7 @@ function rulesFor(s) {
   add('initiative', t => t.mods.DEX, { half: bard, kDefault: +c.feats.includes('Alert') });
   add('passivePerception', t => 10 + t.mods.WIS, { half: bard, signed: false, profField: fieldOf['skill:Perception'],
     kDefault: +bgSkills.includes('Skill: Perception') });
-  const caster = c.classes.some(x => D.classes[x.key].spellcasting);
+  const caster = c.classes.some(casterOf);
   add('spellAttack', t => t.mods[t.cast], { kDefault: 1, fill: caster });
   add('spellDC', t => 8 + t.mods[t.cast], { kDefault: 1, fill: caster, signed: false });
   if (c.level) add('profBonus', t => t.levelPB, { prof: false });
@@ -630,10 +673,10 @@ function spellLines() {
 function writeSpellLine(line, s) {
   writeField(line.field, s.name);
   const r = line.row;
-  if (r) {
-    for (const [f, v] of [[r.level, String(s.level)], [r.time, s.time.split(/,| or /)[0]], [r.range, s.range.replace(/ feet\b/, ' ft')],
-      [r.conc, !!s.conc], [r.ritual, !!s.ritual || /Ritual/.test(s.time)], [r.material, /\bM\b/.test(s.components)]]) {
-      if (f) writeField(f, v);
+  if (r) { // a name-only spell (spells.js spellListOnly) has no time, range or components: those boxes are left alone
+    for (const [f, v] of [[r.level, String(s.level)], [r.time, s.time?.split(/,| or /)[0]], [r.range, s.range?.replace(/ feet\b/, ' ft')],
+      [r.conc, !!s.conc], [r.ritual, !!s.ritual || /Ritual/.test(s.time || '')], [r.material, s.components ? /\bM\b/.test(s.components) : !!s.material]]) {
+      if (f && v != null) writeField(f, v);
     }
   }
 }
@@ -667,9 +710,12 @@ function openSuggest(el, source) {
   if (!items.length || items.length === 1 && items[0].label.toLowerCase() === q) return closeSuggest();
   sug = { el, source, items, cut, active: 0 };
   const r = el.getBoundingClientRect();
-  Object.assign(box.style, { left: r.left + scrollX + 'px', top: r.bottom + scrollY + 2 + 'px', minWidth: Math.max(r.width, 200) + 'px' });
+  Object.assign(box.style, { left: r.left + scrollX + 'px', minWidth: Math.max(r.width, 200) + 'px' });
   renderSuggest();
   box.hidden = false;
+  // under the box, or above it when the list would run off the bottom of the window (and there is more room above)
+  const tall = box.offsetHeight, below = innerHeight - r.bottom, up = below < tall + 4 && r.top > below;
+  box.style.top = (up ? r.top - tall - 2 : r.bottom + 2) + scrollY + 'px';
 }
 
 function renderSuggest() {
@@ -758,7 +804,7 @@ const fieldText = name => { const v = currentValue(name); return Array.isArray(v
 const changedStep = s => s.state || [...s.changes.values()].some(c => c.before !== c.after);
 const stateJSON = () => JSON.stringify({ ...sheetState, extraPages: undefined }); // extraPages only matters to the download
 const STATE_LABELS = { marble: 'Killing Marble', mode: 'Sheet mode', effects: 'Effects', concentration: 'Concentration',
-  used: 'Class features', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice', beyondIgnored: 'Beyond the rules' };
+  used: 'Feature uses', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice', beyondIgnored: 'Beyond the rules' };
 
 function newStep(s) {
   history.undo.push(s);
@@ -1075,7 +1121,7 @@ $('redo').addEventListener('click', redo);
 for (const ev of ['effects-change', 'resources-change', 'sheet-state-change']) document.addEventListener(ev, () => { syncState(); markUnsaved(); });
 addEventListener('beforeunload', e => { if (unsaved()) { e.preventDefault(); e.returnValue = ''; } });
 Object.assign(window, { character, fields, setStat, getField: currentValue, sheetState, pdfHooks,
-  calc: { weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor } }); // used by roller.js
+  calc: { weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor, pactOf, casterOf, subclassOf, classRe } }); // used by roller.js
 // Reading and writing the sheet by stat key, for levelup.js. set() refreshes "character" (and the boxes that follow).
 window.sheet = {
   get map() { return sheetMap; },

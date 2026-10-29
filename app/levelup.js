@@ -7,7 +7,7 @@
 (() => {
 'use strict';
 const D = window.DND, C = window.character, S = window.sheet, $ = id => document.getElementById(id);
-const { fmt } = window.calc;
+const { fmt, casterOf, classRe } = window.calc;
 
 // h('div', { class: 'x', onclick: fn }, child, 'text', [more]) -> element
 const h = (tag, attrs = {}, ...kids) => {
@@ -36,6 +36,10 @@ const pbAt = lvl => D.rules.proficiencyBonusByLevel[Math.min(20, Math.max(1, lvl
 const sum = a => a.reduce((t, x) => t + x, 0);
 const toggle = (arr, x) => { const i = arr.indexOf(x); if (i < 0) arr.push(x); else arr.splice(i, 1); };
 const textOf = v => String(v ?? '').trim();
+// A spell by name, Basic Rules names (aliases) too; spells.js's name-only list (no rules text) as the fallback
+const spellByName = n => n && (D.spells.find(s => s.name === n || s.aliases?.includes(n)) || D.spellListOnly.find(s => s.name === n)) || null;
+// A count that grows at some class levels ({ 3: 3, 7: 5 }): the number at this level
+const knownAt = (map, lvl) => Object.entries(map || {}).reduce((n, [l, v]) => +l <= lvl ? v : n, 0);
 
 let L = null;   // the level-up in progress, null while the window is closed
 let win = null; // the window
@@ -46,18 +50,24 @@ const total = () => C.classes.reduce((t, c) => t + c.level, 0);
 const classLevel = () => L.isNew ? 1 : C.classes.find(c => c.key === L.key).level + 1;
 const charLevel = () => total() + 1;
 const tableRow = lvl => cls().levels[lvl - 1];
-const newClasses = () => L.isNew ? [...C.classes, { key: L.key, name: cls().name, level: 1 }]
-  : C.classes.map(c => c.key === L.key ? { ...c, level: c.level + 1 } : c);
+// The classes after the level; the class going up carries the subclass it has (or picks now), for subclass spellcasting
+const newClasses = () => {
+  const sub = subclass().data || null;
+  return L.isNew ? [...C.classes, { key: L.key, name: cls().name, level: 1, sub: null }]
+    : C.classes.map(c => c.key === L.key ? { ...c, level: c.level + 1, sub } : c);
+};
 const score = ab => typeof C[ab.toLowerCase()] === 'number' ? C[ab.toLowerCase()] : null;
 const who = () => textOf(C.name) || 'Your character';
 const primaryOf = key => ABS.find(ab => D.rules.abilities[ab] === D.classes[key].primaryAbility.split(/ or | and /)[0]) || 'STR';
 
 // Multiclassing needs 13+ in the main ability of the new class and of every class you already have
+// (the Blood Hunter: STR or DEX, and INT)
+const needText = m => [m.requiresOneOf && `${m.requiresOneOf.join(' or ')} 13`, `${m.requires.join(m.requiresAny ? ' or ' : ' and ')} 13`].filter(Boolean).join(' and ');
 function missingFor(key) {
   return [...C.classes.map(c => c.key), key].flatMap(k => {
     const m = D.classes[k].multiclass, ok = a => (score(a) ?? 0) >= 13;
-    return (m.requiresAny ? m.requires.some(ok) : m.requires.every(ok)) ? []
-      : [`${m.requires.join(m.requiresAny ? ' or ' : ' and ')} 13 for ${D.classes[k].name}`];
+    return (m.requiresAny ? m.requires.some(ok) : m.requires.every(ok)) && (!m.requiresOneOf || m.requiresOneOf.some(ok)) ? []
+      : [`${needText(m)} for ${D.classes[k].name}`];
   });
 }
 
@@ -71,39 +81,63 @@ function profLevel(key, ab) {
 const skillAb = name => SKILLS.find(s => s.name === name).ability;
 
 // ---- Subclass ------------------------------------------------------------------------------
-// The free rules have one subclass per class. Its short name is looked for in the Class and Subclass boxes, the full
-// name anywhere in the features text.
-const SUB_WORD = { barbarian: 'Berserker', bard: 'Lore', cleric: 'Life', druid: 'Land', fighter: 'Champion', monk: 'Open Hand',
-  paladin: 'Devotion', ranger: 'Hunter', rogue: 'Thief', sorcerer: 'Draconic', warlock: 'Fiend', wizard: 'Evoker|Evocation' };
-const subclassOnSheet = key => new RegExp(`\\b(${SUB_WORD[key]})\\b`, 'i').test(`${C.classLevel ?? ''} ${C.subclass ?? ''}`) ||
-  `${C.features ?? ''}\n${C.features2 ?? ''}`.toLowerCase().includes(D.classes[key].subclass.name.toLowerCase());
+// Every subclass of the class is in the data (the free-rules one first); script.js finds the one the sheet names.
+// "Another subclass" (a typed name) is for anything else: its features become notes to add by hand.
+const OTHER_SUB = 'Another subclass';
+const subsOf = key => D.classes[key].subclasses || [D.classes[key].subclass];
+const subNamed = name => subsOf(L.key).find(s => s.name === name) || null;
 
-// -> { none } before the subclass level, else { data (it's the free-rules one), name, choosing, ask, here (a subclass feature at this level) }
+// -> { none } before the subclass level, else { data (the subclass; null = one outside the data), name, choosing, ask,
+// here (a subclass feature at this level) }
 function subclass() {
-  const c = cls(), lvl = classLevel(), at = c.features.find(f => f.choice?.type === 'subclass')?.lvl ?? 3;
+  const c = cls(), lvl = classLevel(), pickF = c.features.find(f => f.choice?.type === 'subclass'), at = pickF?.lvl ?? 3;
   if (lvl < at) return { none: true };
-  const here = tableRow(lvl).features.includes(`${c.name} Subclass`);
+  const here = tableRow(lvl).features.includes(pickF?.name);
   if (lvl === at) {
-    const p = L.picks.subclass ||= { data: true, name: '' };
-    return { choosing: true, data: p.data, name: p.data ? c.subclass.name : textOf(p.name), here };
+    const p = L.picks.subclass ||= { name: subsOf(L.key)[0].name, other: '' }, data = subNamed(p.name);
+    return { choosing: true, data, name: data ? data.name : textOf(p.other), here };
   }
-  if (subclassOnSheet(L.key)) return { data: true, name: c.subclass.name, here };
-  const data = L.picks.subHave ?? true;
-  return { data, name: data ? c.subclass.name : textOf(C.subclass), here, ask: here };
+  const found = C.classes.find(x => x.key === L.key)?.sub;
+  if (found) return { data: found, name: found.name, here };
+  const data = subNamed(L.picks.subHave ?? subsOf(L.key)[0].name);
+  return { data, name: data ? data.name : textOf(L.picks.subWhich?.other) || textOf(C.subclass), here, ask: here };
 }
+// The subclass's own spellcasting (third casters, the Profane Soul), when it has it
+const subCaster = () => subclass().data?.spellcasting || null;
 
 // ---- What the level brings ---------------------------------------------------------------
 // Feature cards: class and subclass features at the new class level, table counts that go up without a feature of their
 // own (Weapon Mastery, Eldritch Invocations), and species traits at the new character level.
 function gains() {
   const c = cls(), lvl = classLevel(), src = `${c.name} ${lvl}`, out = [];
-  for (const f of c.features.filter(f => f.lvl === lvl)) out.push({ ...f, id: `c${lvl}:${f.name}`, src, kind: 'feature' });
+  // a feature, then its further picks (more) as parts: shown in its card, written in its line; a part with `if` only
+  // when that option of the feature is picked (Kobold Legacy: Craftiness asks for a skill)
+  const push = (f, id, from, kind = 'feature') => {
+    out.push({ ...f, id, src: from, kind });
+    (f.more || []).forEach((ch, i) => {
+      if (!ch.if || L.picks[id] === ch.if) out.push({ id: `${id}#${i + 1}`, name: f.name, src: from, kind, choice: ch, part: id, text: '' });
+    });
+  };
+  for (const f of c.features.filter(f => f.lvl === lvl)) push(f, `c${lvl}:${f.name}`, src);
   const sub = subclass();
   if (sub.data && sub.here) {
-    for (const f of c.subclass.features.filter(f => f.lvl === lvl)) out.push({ ...f, id: `s${lvl}:${f.name}`, src: c.subclass.name, kind: 'feature' });
+    for (const f of sub.data.features.filter(f => f.lvl === lvl)) push(f, `s${lvl}:${f.name}`, sub.data.name);
   } else if (sub.here && !sub.none) {
     out.push({ id: 'subOther', name: `${sub.name || 'Subclass'} feature`, src, kind: 'feature', manual: true,
-      text: `Your subclass gives a feature at ${c.name} level ${lvl}. It isn't in the free rules, so add it to the sheet yourself.` });
+      text: `Your subclass gives a feature at ${c.name} level ${lvl}. It isn't in the rules data, so add it to the sheet yourself.` });
+  }
+  // lists that grow at this level without a feature that picks from them (more maneuvers at Fighter 7, a blood curse at 6 ...)
+  for (const [id, list] of Object.entries(listsHere())) {
+    const n = listMore(list);
+    if (n > 0 && !out.some(f => f.choice?.type === 'list' && f.choice.list === id)) {
+      out.push({ id: `list:${id}`, name: list.title, src: list.sub ? sub.data.name : src, kind: 'feature', choice: { type: 'list', list: id }, added: true,
+        text: `You learn ${n} more (you may also swap one you know).` });
+    }
+  }
+  // a Wizard savant (Evoker, Abjurer ...): one free spellbook spell of the school at each new level of spell slots
+  if (sub.data?.savant && !sub.choosing && newSlotLevel()) {
+    out.push({ id: 'savant', name: `${sub.data.savant} Savant`, src: sub.data.name, kind: 'feature', choice: { type: 'spellbook', count: 1, school: sub.data.savant },
+      text: `A new level of spell slots: add one ${sub.data.savant} Wizard spell to your spellbook for free.` });
   }
   const now = tableRow(lvl), before = L.isNew ? {} : tableRow(lvl - 1), more = k => (now[k] || 0) - (before[k] || 0);
   if (masteryMore() > 0 && !out.some(f => f.choice?.type === 'weaponMastery')) {
@@ -119,7 +153,7 @@ function gains() {
   if (bg?.feat) out.push({ id: 'origin', name: 'Origin feat', src: `${bg.name} background`, kind: 'feature', choice: { type: 'feat', category: 'origin' },
     text: `Your background gives you an Origin feat: ${bg.feat}.` });
   const sp = C.speciesData, lv = charLevel();
-  for (const f of sp?.features || []) if (f.lvl === lv) out.push({ ...f, id: `sp:${f.name}`, src: sp.name, kind: 'species' });
+  for (const f of sp?.features || []) if (f.lvl === lv) push(f, `sp:${f.name}`, sp.name, 'species');
   return out;
 }
 // Weapon kinds to master gained at this level (every class with Weapon Mastery has its count per level)
@@ -127,9 +161,23 @@ const masteryMore = () => {
   const by = cls().weaponMastery?.countByLevel, lvl = classLevel();
   return by ? by[lvl - 1] - (L.isNew ? 0 : by[lvl - 2]) : 0;
 };
+// Lists to pick from (classes.js header: lists): the class's (blood curses, magic item plans) and the subclass's (maneuvers)
+const listsHere = () => ({ ...cls().lists, ...Object.fromEntries(Object.entries(subclass().data?.lists || {}).map(([id, l]) => [id, { ...l, sub: true }])) });
+const listOf = id => listsHere()[id];
+// How many more of a list you know at this level: by a column of the class table or by the list's own counts
+const listMore = list => {
+  const lvl = classLevel(), at = l => list.column ? cls().levels[l - 1]?.[list.column] || 0 : knownAt(list.known, l);
+  return at(lvl) - (L.isNew || lvl < 2 ? 0 : at(lvl - 1));
+};
+// A higher level of spell slots than the class had a level ago (its own table)
+const newSlotLevel = () => {
+  const top = lvl => lvl < 1 ? 0 : (cls().levels[lvl - 1].spells?.slots || []).reduce((m, n, i) => n ? i + 1 : m, 0);
+  return !L.isNew && top(classLevel()) > top(classLevel() - 1);
+};
 // How many picks a table-driven choice gets at this level
 const countOf = f => {
   if (f.choice.type === 'weaponMastery') return masteryMore();
+  if (f.choice.type === 'list') return listMore(listOf(f.choice.list) || {});
   if (f.choice.type !== 'invocations') return f.choice.count || 1;
   const now = tableRow(classLevel()), before = L.isNew ? {} : tableRow(classLevel() - 1);
   return (now.eldritchInvocations || 0) - (before.eldritchInvocations || 0);
@@ -141,7 +189,8 @@ const NUMBERS = { attacks: 'Attacks per Attack action', rages: 'Rages', rageDama
   secondWindUses: 'Second Wind uses', actionSurgeUses: 'Action Surge uses', indomitableUses: 'Indomitable uses',
   martialArtsDie: 'Martial Arts die', focusPoints: 'Focus Points', unarmoredMovement: 'Unarmored Movement', favoredEnemies: 'Favored Enemy uses',
   sneakAttack: 'Sneak Attack', sorceryPoints: 'Sorcery Points', metamagic: 'Metamagic options', eldritchInvocations: 'Eldritch Invocations',
-  arcanum: 'Mystic Arcanum', spellbook: 'Spells in your spellbook' };
+  arcanum: 'Mystic Arcanum', spellbook: 'Spells in your spellbook', plansKnown: 'Magic item plans', magicItems: 'Replicated magic items',
+  hemocraftDie: 'Hemocraft Die', bloodCurses: 'Blood curses known', bloodMaledict: 'Blood Maledict uses', crimsonRites: 'Crimson rites known' };
 const numText = (k, v) => v == null || v === 0 || (Array.isArray(v) && !v.length) ? '—' : /Die$/.test(k) ? 'd' + v
   : k === 'unarmoredMovement' ? `+${v} ft` : k === 'rageDamage' ? fmt(v) : Array.isArray(v) ? v.map(l => 'level ' + l).join(', ') : String(v);
 function numbers() {
@@ -176,7 +225,7 @@ function blocked(f) {
     const abs = Object.keys(p.ability).filter(k => k !== 'any'), ok = a => (score(a) ?? 0) >= p.ability[a];
     if (!(p.ability.any ? abs.some(ok) : abs.every(ok))) return `needs ${abs.map(a => `${a} ${p.ability[a]}`).join(p.ability.any ? ' or ' : ' and ')}`;
   }
-  if (p.feature_named === 'Spellcasting' && !newClasses().some(c => D.classes[c.key].spellcasting)) return 'needs Spellcasting';
+  if (p.feature_named === 'Spellcasting' && !newClasses().some(casterOf)) return 'needs Spellcasting';
   if (p.armor && !hasArmor(p.armor)) return `needs ${p.armor === 'Shields' ? 'Shield' : p.armor + ' armor'} training`;
   return null;
 }
@@ -230,6 +279,8 @@ function skillPick(id, count, from, title = 'Skill proficiencies') {
 function expertisePick(f) {
   return [multiPick(f.id, f.choice.count, expertiseItems(f.choice.from), 'Expertise'), f.choice.languages ? textsPick(f.id + ':lang', f.choice.languages, 'language') : null];
 }
+// Proficiency and Expertise in one pick (Blessings of Knowledge): only skills with Expertise already are out
+const expertiseOrProf = (id, from) => from.map(name => ({ name, off: profLevel('skill:' + name, skillAb(name)) >= 2 ? 'has Expertise' : null }));
 // allSkills: proficient in everything anyway (Boon of Skill)
 function expertiseItems(from = SKILLS.map(s => s.name), allSkills = false) {
   const gained = new Set(skillPickIds().flatMap(id => L.picks[id] || []));
@@ -266,10 +317,10 @@ const FREE = 'Free rules';
 const bookOf = x => x.source || FREE;
 function featPick(f) {
   const ch = f.choice, p = L.picks[f.id] ||= { name: ch.category === 'general' ? 'Ability Score Improvement' : '' };
-  const ui = L.ui[f.id] ||= { q: '', book: '' }, all = featsFor(ch.category);
+  const ui = L.ui[f.id] ||= { q: '', book: '' }, all = featsFor(ch.category).filter(x => !ch.only || ch.only.includes(x.name)); // only: the Blood Hunter's four styles
   const items = all.map(x => ({ name: x.name, text: x.summary, off: blocked(x), tag: x.source ? bookOf(x).replace(/ \(2024\)$/, '') : null, book: bookOf(x) }));
   if (ch.or) items.push({ name: ch.or.name, text: `Instead of a feat: learn ${ch.or.cantrips} ${cap(ch.or.list)} cantrips; they count as ${cls().name} spells.` });
-  items.push({ name: 'Other feat', text: 'A feat from another book: type its name below and add what it does yourself.' });
+  if (!ch.only) items.push({ name: 'Other feat', text: 'A feat from another book: type its name below and add what it does yourself.' });
   const feat = D.feats.find(x => x.name === p.name), ai = feat?.abilityIncrease, fc = feat?.choice, extra = [];
   if (p.name === 'Other feat') extra.push(h('input', { type: 'text', class: 'lu-wide', value: p.other || '', placeholder: 'Feat name', oninput: e => { p.other = e.target.value; } }));
   if (ai?.options) extra.push(asiPick(p, ai.max));
@@ -321,7 +372,7 @@ function featPick(f) {
     box.replaceChildren(onePick(() => p.name, n => { if (n !== p.name) dropSubPicks(f.id); p.name = n; }, shown, { after: extra, compact: true }));
   };
   fill();
-  return [books.length > 1 || all.length > 12 ? h('div', { class: 'lu-find' },
+  return [!ch.only && (books.length > 1 || all.length > 12) ? h('div', { class: 'lu-find' },
     h('input', { type: 'search', class: 'lu-search', placeholder: 'Search feats', value: ui.q, oninput: e => { ui.q = e.target.value; fill(); } }),
     books.length > 1 ? h('select', { onchange: e => { ui.book = e.target.value; fill(); } },
       h('option', { value: '' }, 'All books'), books.map(b => h('option', { value: b, selected: ui.book === b }, b))) : null) : null, box];
@@ -342,12 +393,36 @@ function spellIdsOf(f) {
   return f.choice.or && p.name === f.choice.or.name ? [f.id + ':or'] : [];
 }
 
+// Every subclass of the class as a card (search and a book filter when there are many), plus "Another subclass" (typed).
+// get/set: the chosen name; other: the picks object holding the typed name.
+function subclassCards(get, set, other, uiId) {
+  const c = cls(), ui = L.ui[uiId] ||= { q: '', book: '' }, at = c.features.find(f => f.choice?.type === 'subclass')?.lvl ?? 3;
+  const items = subsOf(L.key).map(s => ({ name: s.name, book: bookOf(s), tag: s.source ? bookOf(s).replace(/ \(2024\)$/, '') : null,
+    text: (s.summary ? s.summary + ' ' : '') + `(${s.features.filter(f => f.lvl === at).map(f => f.name).join(', ')})` }));
+  items.push({ name: OTHER_SUB, text: 'A subclass from another book or your DM: type its name; add its features yourself.' });
+  const books = [...new Set(items.filter(it => it.book).map(it => it.book))], box = h('div');
+  const after = [h('input', { type: 'text', class: 'lu-wide', value: other.other || '', placeholder: 'Subclass name', oninput: e => { other.other = e.target.value; } })];
+  const fill = () => {
+    const q = ui.q.trim().toLowerCase();
+    const shown = items.filter(it => it.name === get() || !it.book || (!ui.book || it.book === ui.book) && (!q || `${it.name} ${it.text}`.toLowerCase().includes(q)));
+    box.replaceChildren(onePick(get, set, shown, { after: get() === OTHER_SUB ? after : [], compact: true }));
+  };
+  fill();
+  return [items.length > 6 ? h('div', { class: 'lu-find' },
+    h('input', { type: 'search', class: 'lu-search', placeholder: 'Search subclasses', value: ui.q, oninput: e => { ui.q = e.target.value; fill(); } }),
+    books.length > 1 ? h('select', { onchange: e => { ui.book = e.target.value; fill(); } },
+      h('option', { value: '' }, 'All books'), books.map(b => h('option', { value: b, selected: ui.book === b }, b))) : null) : null, box];
+}
 function subclassPick() {
-  const c = cls(), p = L.picks.subclass;
-  return onePick(() => p.data ? c.subclass.name : 'Another subclass', n => { p.data = n === c.subclass.name; }, [
-    { name: c.subclass.name, text: 'The subclass in the free rules: its features are added for you, now and at later levels.' },
-    { name: 'Another subclass', text: 'From the Player\'s Handbook or elsewhere: type its name; add its features yourself.' }],
-  { after: [h('input', { type: 'text', class: 'lu-wide', value: p.name, placeholder: 'Subclass name', oninput: e => { p.name = e.target.value; } })].filter(() => !p.data) });
+  const p = L.picks.subclass;
+  return subclassCards(() => p.name, n => { p.name = n; }, p, 'subclass');
+}
+
+// List picks (maneuvers, blood curses, magic item plans ...): the ones on your sheet already, or of a higher level, are greyed out
+function listPick(f) {
+  const list = listOf(f.choice.list), known = `${C.features ?? ''}\n${C.features2 ?? ''}`, lvl = classLevel();
+  return multiPick(f.id, countOf(f), list.items.map(it => ({ name: it.name, title: it.text || null, note: it.text && it.text.length > 90 ? it.text.slice(0, 88) + '…' : it.text,
+    off: it.lvl > lvl ? `${cls().name} level ${it.lvl}+` : known.includes(it.name) ? 'on your sheet' : null })), list.title);
 }
 
 const weaponItems = () => {
@@ -365,9 +440,14 @@ function choiceUI(f) {
   switch (ch.type) {
     case 'subclass': return subclassPick();
     case 'feat': return featPick(f);
-    case 'skills': return skillPick(f.id, n, ch.from === 'class' ? cls().skills.from : SKILLS.map(s => s.name));
+    case 'skills': {
+      const from = ch.from === 'class' ? cls().skills.from : Array.isArray(ch.from) ? ch.from : SKILLS.map(s => s.name);
+      return ch.expertise ? multiPick(f.id, n, expertiseOrProf(f.id, from), 'Skills (proficiency and Expertise)') : skillPick(f.id, n, from, ch.title);
+    }
     case 'expertise': return expertisePick(f);
     case 'languages': return textsPick(f.id, n, 'language');
+    case 'tools': return textsPick(f.id, n, ch.kind.replace(/s$/, ''), `${ch.kind}, e.g. ${(D.creation?.toolKinds?.[ch.kind] || ["Smith's Tools"])[0]}`);
+    case 'list': return listPick(f);
     case 'weaponMastery': return multiPick(f.id, n, weaponItems(), 'Weapon kinds to master');
     case 'invocations': {
       const known = `${C.features ?? ''}\n${C.features2 ?? ''}`;
@@ -382,8 +462,20 @@ function choiceUI(f) {
     case 'spellbook': return spells(range(1, ch.maxLevel || maxSpellLevel()), ['Wizard'], ch.school);
     case 'option': return onePick(() => L.picks[f.id], v => { L.picks[f.id] = v; }, ch.options);
     case 'lineage': return lineagePick(f);
+    case 'ability': return abilityPick(f);
   }
   return null;
+}
+// The ability a species trait's spells (or its save DC) use: INT, WIS or CHA, your casting ability by default
+const defaultAbility = ch => {
+  const sc = C.spellcasting, want = cls().spellcasting?.ability || (sc?.class ? sc.ability : null) || sc?.ability; // the class's, else the best score
+  return ch.from.find(ab => ab === want) || ch.from[0];
+};
+function abilityPick(f) {
+  const ch = f.choice;
+  L.picks[f.id] ||= defaultAbility(ch);
+  return h('div', { class: 'lu-pick' }, pickHead(cap(ch.label || 'spellcasting ability')),
+    h('div', { class: 'chips' }, ch.from.map(ab => h('button', { class: 'chip' + (L.picks[f.id] === ab ? ' on' : ''), onclick: () => { L.picks[f.id] = ab; render(); } }, ab))));
 }
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
 
@@ -392,7 +484,7 @@ const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) =>
 const lineages = () => (C.speciesData?.subspecies || []).map(s => s.name.split(': ').pop());
 function lineagePick(f) {
   const ch = f.choice, list = lineages(), p = L.picks[f.id] ||= { name: C.lineage?.name.split(': ').pop() || '', ability: null };
-  if (ch.ability && !p.ability) p.ability = ch.ability.find(ab => ab === C.spellcasting?.ability) || ch.ability[0];
+  if (ch.ability && !p.ability) p.ability = defaultAbility({ from: ch.ability });
   return [C.lineage ? h('p', { class: 'lu-note' }, `${p.name}, from the Species box.`)
     : h('div', { class: 'lu-opts' }, list.map(n => h('button', { class: 'lu-opt' + (p.name === n ? ' on' : ''), onclick: () => { p.name = n; render(); } }, h('b', {}, n)))),
   ch.ability ? h('div', { class: 'lu-pick' }, pickHead('Spellcasting ability for these spells'),
@@ -416,21 +508,37 @@ function pickText(f) {
     }
     case 'option': return p || '';
     case 'lineage': return p?.name ? p.name + (p.ability ? ` (spellcasting ability: ${p.ability})` : '') : '';
+    case 'ability': return `${p || defaultAbility(ch)} (${ch.label || 'spellcasting ability'})`;
     case 'expertise': return [names(f.id), names(f.id + ':lang')].filter(Boolean).join('; ');
     default: return names(f.id);
   }
 }
 // The line a feature adds to the sheet, e.g. "Extra Attack (Fighter 5): Attack twice ...",
 // "Archery (Fighting Style, Fighter 1): +2 bonus to attack rolls ...", "Ability Score Improvement: STR +2 (Fighter 4)"
+// A list pick (maneuvers, blood curses ...) writes the feature's text and then each pick with what it does on a line of its own.
+// A subclass feature's other picks come with its text too ("Genie's Splendor (...): Persuasion. With no armor, AC = ...").
 function featureLine(f) {
   if (!f.choice) return `${f.name} (${f.src}): ${f.text}`;
-  const pt = pickText(f), p = L.picks[f.id];
+  const pt = [pickText(f), ...gains().filter(g => g.part === f.id).map(pickText)].filter(Boolean).join('; '), p = L.picks[f.id];
   if (f.choice.type === 'feat') {
     const feat = D.feats.find(x => x.name === p?.name), where = f.name === p?.name || f.name === 'Ability Score Improvement' ? f.src : `${f.name}, ${f.src}`;
     return `${pt} (${where})${feat && !feat.abilityIncrease?.options ? ': ' + feat.summary : ''}`;
   }
+  if (f.choice.type === 'list') {
+    const items = (p || []).map(n => listOf(f.choice.list).items.find(it => it.name === n)).filter(Boolean);
+    const lines = items.some(it => it.text) ? items.map(it => `\n${it.name}: ${it.text}`).join('') : f.added ? ` ${pt}.` : ` Chosen: ${pt}.`;
+    return `${f.name} (${f.src}):${f.added ? '' : ' ' + f.text}${lines}`;
+  }
   const opt = f.choice.type === 'option' && f.choice.options.find(o => o.name === p);
-  return `${f.name} (${f.src}): ${pt}${opt ? ' - ' + opt.text : ''}`;
+  // a species trait keeps its text: "Kenku Recall (Kenku): Arcana, History. Proficiency in two skills ...", "Shifting
+  // (Shifter): Bonus Action: ... Beasthide: 1d6 more Temporary HP ..." (a lineage writes only its pick, as before)
+  if (f.kind === 'species' && f.choice.type !== 'lineage') {
+    if (!opt) return `${f.name} (${f.src}): ${pt}. ${f.text}`;
+    const chosen = [opt.text ? '' : opt.name, ...gains().filter(g => g.part === f.id).map(pickText)].filter(Boolean);
+    return `${f.name} (${f.src}): ${f.text}${opt.text ? ` ${opt.name}: ${opt.text}` : ''}${chosen.length ? ` Chosen: ${chosen.join('; ')}.` : ''}`;
+  }
+  const text = !opt && (/^s\d+:/.test(f.id) || f.more) ? `. ${f.text}` : '';
+  return `${f.name} (${f.src}): ${pt}${opt ? ' - ' + opt.text : ''}${text}`;
 }
 // The ability increases a feat pick gives: [{ ab, n, max }]
 function featScores(f) {
@@ -443,7 +551,7 @@ function featScores(f) {
 function missing(f) {
   const ch = f.choice, got = id => (L.picks[id] || L.spells[id] || []).filter(textOf).length;
   if (!ch) return 0;
-  if (['skills', 'expertise', 'weaponMastery', 'invocations', 'metamagic', 'spell', 'spells', 'spellbook', 'languages'].includes(ch.type)) {
+  if (['skills', 'expertise', 'weaponMastery', 'invocations', 'metamagic', 'spell', 'spells', 'spellbook', 'languages', 'tools', 'list'].includes(ch.type)) {
     return Math.max(0, countOf(f) - got(f.id));
   }
   return unpicked(f) ? 1 : 0;
@@ -451,47 +559,71 @@ function missing(f) {
 // A feature's choice that isn't made at all
 function unpicked(f) {
   const ch = f.choice;
-  if (!ch || ch.type === 'subclass' && L.picks.subclass?.data) return false;
+  if (!ch || ch.type === 'subclass' && subclass().data) return false;
   if (ch.type === 'feat') return !L.picks[f.id]?.name || L.picks[f.id].name === 'Other feat' && !textOf(L.picks[f.id].other);
   return !pickText(f);
 }
 
 // ---- Spells ----------------------------------------------------------------------------------
-const maxSpellLevel = () => {
-  const s = tableRow(classLevel()).spells;
-  return !s ? 0 : s.pact ? s.pact.slotLevel : s.slots.reduce((m, n, i) => n ? i + 1 : m, 0);
-};
+// The spellcasting a class level has: the class's table, or its subclass's (a third caster, the Profane Soul's Pact Magic).
+// -> { cantrips, prepared, max (highest spell level), list (class list name) } or null
+const topSlot = slots => slots.reduce((m, n, i) => n ? i + 1 : m, 0);
+function castingAt(lvl) {
+  if (lvl < 1) return { cantrips: 0, prepared: 0, max: 0 };
+  const c = cls(), s = c.spellcasting && c.levels[lvl - 1].spells;
+  if (s) return { cantrips: s.cantrips || 0, prepared: s.prepared || 0, max: s.pact ? s.pact.slotLevel : topSlot(s.slots), list: c.name };
+  const sc = subCaster();
+  return sc && { cantrips: knownAt(sc.cantrips, lvl), prepared: sc.prepared[lvl - 1] || 0, max: sc.pact ? sc.pact[lvl - 1].slotLevel : topSlot(sc.slots[lvl - 1]), list: sc.list };
+}
+const maxSpellLevel = () => castingAt(classLevel())?.max || 0;
 // Spell slots of a set of classes (script.js): multiclass caster levels add up, Pact Magic slots on top
 const slotsFor = window.calc.slotsFor;
 
 const known = () => new Set(C.spells.map(x => x.spell.name));
 // New cantrips / prepared spells / spellbook spells this level, spells that come prepared, and the slots before and after
 function spellPlan() {
-  const c = cls(), lvl = classLevel(), now = tableRow(lvl), before = L.isNew ? null : tableRow(lvl - 1);
-  const plan = { caster: !!c.spellcasting, cantrips: 0, prepared: 0, book: 0, lists: [c.name], always: [] };
-  if (c.spellcasting) {
-    plan.cantrips = now.spells.cantrips - (before?.spells.cantrips ?? 0);
-    plan.prepared = now.spells.prepared - (before?.spells.prepared ?? 0);
+  const c = cls(), lvl = classLevel(), now = castingAt(lvl), before = L.isNew ? null : castingAt(lvl - 1);
+  const plan = { caster: !!now, cantrips: 0, prepared: 0, book: 0, lists: [now?.list || c.name], always: [] };
+  if (now) {
+    plan.cantrips = now.cantrips - (before?.cantrips ?? 0);
+    plan.prepared = now.prepared - (before?.prepared ?? 0);
     if (L.key === 'bard' && lvl >= 10) plan.lists.push('Cleric', 'Druid', 'Wizard'); // Magical Secrets
-    if (L.key === 'wizard') plan.book = (now.spellbook || 0) - (before?.spellbook || 0);
+    if (L.key === 'wizard') plan.book = (tableRow(lvl).spellbook || 0) - (L.isNew ? 0 : tableRow(lvl - 1).spellbook || 0);
   }
-  const have = known(), add = (name, why) => {
-    const s = D.spells.find(x => x.name === name);
-    if (s && !have.has(name) && !plan.always.some(a => a.spell === s)) plan.always.push({ spell: s, why });
+  // spells that come prepared go on a spell line unless one holds them already (feature text names spells it doesn't give
+  // yet, e.g. "...; 5: Mass Healing Word, Revivify"); a sheet without spell lines can only go by what it names anywhere
+  const lines = S.spellLines(), have = lines.length ? new Set(lines.map(l => textOf(S.get(l.field))).filter(Boolean).map(t => S.spellNamed(t)?.name || t)) : known();
+  const add = (name, why) => {
+    const s = spellByName(name);
+    if (s && !have.has(s.name) && !plan.always.some(a => a.spell === s)) plan.always.push({ spell: s, why });
   };
   for (const f of gains()) {
     const o = f.choice?.type === 'option' && f.choice.options.find(o => o.name === L.picks[f.id]);
     if (o?.grants?.cantrips) plan.cantrips += o.grants.cantrips; // Magician, Thaumaturge: one more cantrip
-    for (const n of f.grants?.alwaysPrepared || []) add(n, f.name);
+    const known = Array.isArray(f.grants?.cantrips) ? f.grants.cantrips : []; // Light Bearer, Otherworldly Presence
+    for (const n of [...f.grants?.alwaysPrepared || [], ...known, ...o?.grants?.alwaysPrepared || []]) add(n, f.name);
   }
-  const sub = subclass(), subSpells = c.subclass.spells;
-  if (sub.data && subSpells && !subSpells.arid) for (const n of subSpells[lvl] || []) add(n, c.subclass.name);
-  plan.land = sub.data && subSpells?.arid && subSpells.arid[lvl] ? true : false;
-  for (const t of C.lineage?.traits || []) if (t.lvl === charLevel()) add(S.spellNamed(t.name)?.name, C.lineage.name.split(': ').pop());
+  for (const n of C.speciesData?.spells?.[charLevel()] || []) add(n, C.speciesData.name); // Githyanki Psionics ...
+  const sub = subclass(), subSpells = sub.data?.spells;
+  if (subSpells && !subSpells.arid) for (const n of subSpells[lvl] || []) add(n, sub.data.name);
+  for (const n of spellsFromChoice(sub.data)[lvl] || []) add(n, sub.data.name);
+  plan.land = subSpells?.arid && subSpells.arid[lvl] ? true : false;
+  for (const t of C.lineage?.traits || []) if (t.lvl === charLevel()) add((spellByName(t.name) || S.spellNamed(t.name))?.name, C.lineage.name.split(': ').pop());
   plan.slots = { before: slotsFor(C.classes), after: slotsFor(newClasses()) };
   plan.slotsChange = plan.slots.before.some((n, i) => n !== plan.slots.after[i]);
   plan.any = plan.caster || plan.cantrips > 0 || plan.always.length > 0 || plan.slotsChange;
   return plan;
+}
+
+// Spells that follow an option of a subclass feature (Vestige Spells: a Cleric domain's spells) -> { classLevel: [names] }.
+// The option is picked at this level, or read from that feature's line on the sheet ("Vestige Spells (...): War - ...").
+function spellsFromChoice(s) {
+  const sf = s?.spellsFrom;
+  if (!sf) return {};
+  const f = gains().find(g => g.name === sf.feature && g.choice?.type === 'option');
+  const line = `${C.features ?? ''}\n${C.features2 ?? ''}`.split('\n').find(l => l.trim().startsWith(sf.feature)) || '';
+  const [key, name] = sf.options[f ? L.picks[f.id] : line.match(/:\s*([A-Za-z]+)/)?.[1]] || [];
+  return key ? (D.classes[key].subclasses || []).find(x => x.name === name)?.spells || {} : {};
 }
 
 // Every spell picked anywhere in the level-up (but one picker), so the same spell can't be picked twice. A Wizard
@@ -546,13 +678,15 @@ function collect() {
     if (g.armor) out.armor.push(...g.armor);
     if (g.languages) out.languages.push(...g.languages);
     if (g.tools) out.tools.push(...g.tools);
+    if (g.skills) out.skills.push(...g.skills.filter(n => !profLevel('skill:' + n, skillAb(n))));
     if (g.jackOfAllTrades) out.jack = f;
   };
   for (const f of gains()) {
     if (f.grants) grants(f.grants, f);
     const ch = f.choice, p = L.picks[f.id];
     if (!ch) continue;
-    if (ch.type === 'skills') out.skills.push(...p || []);
+    if (ch.type === 'skills') { out.skills.push(...p || []); if (ch.expertise) out.expertise.push(...p || []); }
+    if (ch.type === 'tools') out.tools.push(...(p || []).filter(textOf));
     if (ch.type === 'expertise') { out.expertise.push(...p || []); out.languages.push(...(L.picks[f.id + ':lang'] || []).filter(textOf)); }
     if (ch.type === 'languages') out.languages.push(...(p || []).filter(textOf));
     if (ch.type === 'option') { const o = ch.options.find(o => o.name === p); if (o?.grants) grants(o.grants, f); }
@@ -609,7 +743,7 @@ function hpGain() {
   }
   const lvl = classLevel(), sub = subclass();
   if (sub.data) {
-    for (const f of cls().subclass.features) {
+    for (const f of sub.data.features) {
       const n = f.grants?.hpPerClassLevel;
       if (n && f.lvl <= lvl) extras.push([f.name, f.lvl === lvl ? lvl * n : n]);
     }
@@ -636,7 +770,7 @@ const diceOf = classes => {
 // class when a subclass is picked and the sheet has no Subclass box. A class without a number (the level is in its own box) stays.
 function classTextAfter(subName) {
   const text = textOf(C.classLevel), parts = text.split(/([/,;&+]|\band\b)/i), c = cls();
-  const partOf = key => parts.findIndex((p, i) => i % 2 === 0 && new RegExp(`\\b${key}\\b`, 'i').test(p));
+  const partOf = key => parts.findIndex((p, i) => i % 2 === 0 && classRe(key).test(p));
   const tag = subName && !S.field('subclass') ? ` (${subName})` : '';
   if (L.first) return S.field('level') ? c.name : `${c.name} 1`; // a level box of its own holds the level
   if (L.isNew) {
@@ -647,7 +781,7 @@ function classTextAfter(subName) {
   if (at < 0) return text;
   let p = parts[at];
   if (/\d+/.test(p)) p = p.replace(/\d+/, n => +n + 1);
-  else if (!(S.field('level') && C.classes.length === 1)) p = p.replace(new RegExp(`\\b${L.key}\\b`, 'i'), m => `${m} ${classLevel()}`);
+  else if (!(S.field('level') && C.classes.length === 1)) p = p.replace(classRe(L.key), m => `${m} ${classLevel()}`);
   parts[at] = tag ? p.replace(/\s*$/, s => tag + s) : p;
   return parts.join('');
 }
@@ -807,8 +941,9 @@ function changes() {
     add('Spells', 85, f ? { id: 'slot' + i, label: `Level ${i + 1} slots`, from: cur || '—', to: write || '—', apply: () => S.set(f, write) }
       : { label: `Level ${i + 1} slots`, from, to, note: 'No slots box for this level found: write it in yourself.' });
   });
-  if (c.spellcasting && !C.classes.some(x => D.classes[x.key].spellcasting)) { // first spellcasting class: fill the empty spellcasting boxes
-    const ab = c.spellcasting.ability, pb = pbAt(lv), m = modOf(scores[ab] ?? 10);
+  const caster = c.spellcasting || subCaster();
+  if (caster && !C.classes.some(casterOf)) { // first spellcasting class (or subclass): fill the empty spellcasting boxes
+    const ab = caster.ability, pb = pbAt(lv), m = modOf(scores[ab] ?? 10);
     for (const [key, v] of [['spellClass', c.name], ['spellAbility', D.rules.abilities[ab]], ['spellMod', fmt(m)], ['spellDC', String(8 + m + pb)], ['spellAttack', fmt(m + pb)]]) {
       if (F(key) && !textOf(C[key])) add('Spells', 86, { id: key, label: { spellClass: 'Spellcasting class', spellAbility: 'Spellcasting ability', spellMod: 'Spellcasting modifier', spellDC: 'Spell save DC', spellAttack: 'Spell attack bonus' }[key],
         to: v, apply: () => S.set(F(key), v) });
@@ -817,6 +952,7 @@ function changes() {
 
   // Features, feats and species traits as lines of text
   for (const f of gains()) {
+    if (f.part) continue; // written in its feature's line
     if (f.choice?.type === 'subclass' || f.manual) { if (f.manual) add('Features', 90, { label: f.name, note: f.text }); continue; }
     const kind = f.choice?.type === 'feat' && L.picks[f.id]?.name ? 'feat' : f.kind, t = targetOf(kind), line = featureLine(f);
     // under a picked feat its summary (none for Ability Score Improvement, the pick says it all), under other choices the feature's text
@@ -836,7 +972,7 @@ function changes() {
     note: `${got ? `${got} of ${n} picked` : 'Nothing picked yet'}: go back to ${page}, or choose later.` });
   for (const f of gains()) {
     const m = missing(f), n = f.choice && ['feat', 'option', 'subclass'].includes(f.choice.type) ? 1 : f.choice ? countOf(f) : 0;
-    if (m) todo(f.name, n, n - m, 'Features');
+    if (m) todo(f.part && f.choice.title ? `${f.name}: ${f.choice.title}` : f.name, n, n - m, 'Features');
   }
   if (L.first) {
     const sk = (L.picks['mc:sk'] || []).length, tl = (L.picks['mc:tools'] || []).filter(textOf).length, tc = c.toolChoice;
@@ -898,11 +1034,12 @@ function classStep() {
     return `d${c.hitDie} Hit Die · ${names.length ? names.join(', ') : 'no new features'}`;
   };
   const others = Object.keys(D.classes).filter(k => !C.classes.some(c => c.key === k));
-  if (L.first) { // a new character: any class, level 1
+  if (L.first) { // a new character: any class, level 1 (the ▾ on a card says what the class is about, dialog.js)
     return [h('p', { class: 'lu-lead' }, `Which class does ${who()} start with?`),
-      h('div', { class: 'lu-cards compact' }, others.map(k => h('button', { class: 'lu-card' + (L.key === k ? ' on' : ''),
+      h('div', { class: 'lu-cards compact' }, others.map(k => window.aboutCard(h('button', { class: 'lu-card' + (L.key === k ? ' on' : ''),
         onclick: () => { if (L.key !== k) { Object.assign(L, { key: k, picks: {}, spells: {}, ui: {} }); presetFirst(); } render(); } },
-      h('b', {}, D.classes[k].name), h('span', {}, `${D.classes[k].primaryAbility} · ${preview(k, 1)}`))))];
+      h('b', {}, D.classes[k].name), h('span', {}, `${D.classes[k].primaryAbility} · ${preview(k, 1)}`)),
+      { open: L.about.includes(k), label: D.classes[k].name, info: [D.classes[k].summary], toggle: () => { toggle(L.about, k); render(); } })))];
   }
   const mc = L.isNew ? missingFor(L.key) : [];
   return [
@@ -915,8 +1052,9 @@ function classStep() {
       h('div', { class: 'lu-opts' }, others.map(k => {
         const miss = missingFor(k);
         return h('button', { class: 'lu-opt' + (L.key === k ? ' on' : ''), onclick: () => choose(k, true), title: miss.join('; ') || null },
-          h('b', {}, D.classes[k].name), h('small', {}, miss.length ? 'needs ' + D.classes[k].multiclass.requires.join(D.classes[k].multiclass.requiresAny ? '/' : '+') + ' 13' : `d${D.classes[k].hitDie}`));
+          h('b', {}, D.classes[k].name), h('small', {}, miss.length ? 'needs ' + needText(D.classes[k].multiclass) : `d${D.classes[k].hitDie}`));
       })),
+      cls().summary ? h('p', { class: 'lu-note lu-blurb' }, cls().summary) : null,
       h('p', { class: 'lu-note' }, cls().multiclass.text),
       mc.length ? h('p', { class: 'lu-warn' }, `Multiclassing rules: you need ${mc.join(', ')}. You can still go ahead if your DM allows it.`) : null) : null
   ];
@@ -978,14 +1116,15 @@ function featuresStep() {
       m.tools && !Array.isArray(m.tools) ? textsPick('mc:tools', m.tools.count, 'tool', m.tools.from) : null));
   }
   if (sub.ask) {
+    const p = L.picks.subWhich ||= {};
     cards.push(h('section', { class: 'lu-feat' }, h('div', { class: 'lu-fh' }, h('b', {}, 'Your subclass'), h('small', {}, cls().name)),
-      h('p', {}, `Your ${cls().name} subclass gets a feature at this level, but the sheet doesn't say which subclass you have.`),
-      onePick(() => L.picks.subHave ?? true ? cls().subclass.name : 'Another subclass', n => { L.picks.subHave = n === cls().subclass.name; }, [
-        { name: cls().subclass.name, text: 'Its features are added for you.' }, { name: 'Another subclass', text: 'Add its features yourself.' }])));
+      h('p', {}, `Your ${cls().name} subclass gets a feature at this level, but the sheet doesn't say which subclass you have. Which is it?`),
+      subclassCards(() => L.picks.subHave ?? subsOf(L.key)[0].name, n => { L.picks.subHave = n; }, p, 'subHave')));
   }
-  for (const f of list) {
-    const ui = f.choice ? choiceUI(f) : null; // sets the default pick, so before unpicked()
-    cards.push(h('section', { class: 'lu-feat' + (f.choice ? ' choice' : '') + (missing(f) ? ' todo' : '') },
+  for (const f of list.filter(g => !g.part)) {
+    const parts = list.filter(g => g.part === f.id);
+    const ui = [f.choice ? choiceUI(f) : null, ...parts.map(g => [g.choice.title ? h('p', { class: 'lu-note' }, g.choice.title) : null, choiceUI(g)])]; // sets the default picks, so before missing()
+    cards.push(h('section', { class: 'lu-feat' + (f.choice ? ' choice' : '') + ([f, ...parts].some(missing) ? ' todo' : '') },
       h('div', { class: 'lu-fh' }, h('b', {}, f.name), h('small', {}, f.src)), h('p', {}, f.text), ui));
   }
   if (!cards.length) cards.push(h('p', { class: 'lu-lead' }, `No new features at ${cls().name} level ${classLevel()}.`));
@@ -999,9 +1138,10 @@ function featuresStep() {
 function resetSwap() { L.swap = { swap0: { from: '' }, swap1: { from: '' } }; delete L.spells.swap0; delete L.spells.swap1; }
 function spellsStep() {
   const plan = spellPlan(), c = cls(), max = maxSpellLevel(), out = [];
-  const lists = plan.lists, tbl = tableRow(classLevel()).spells;
+  const lists = plan.lists, tbl = castingAt(classLevel());
   if (plan.caster) {
-    out.push(h('p', { class: 'lu-lead' }, `${c.name} spells at ${c.name} level ${classLevel()}: ${tbl.cantrips} cantrips, ${tbl.prepared} prepared spells, up to level ${max}` +
+    const whose = tbl.list === c.name ? c.name : `${tbl.list} (${subclass().name})`;
+    out.push(h('p', { class: 'lu-lead' }, `${whose} spells at ${c.name} level ${classLevel()}: ${tbl.cantrips} cantrips, ${tbl.prepared} prepared spells, up to level ${max}` +
       (lists.length > 1 ? ` (Magical Secrets: also ${lists.slice(1).join(', ')} spells).` : '.')));
   }
   if (plan.cantrips > 0) out.push(spellPick('cantrips', { count: plan.cantrips, levels: [0], lists, title: `New ${plural(plan.cantrips, 'cantrip')}` }));
@@ -1062,7 +1202,8 @@ function render() {
   win.querySelector('.lu-sub').textContent = L.applied ? `${who()} · level ${L.applied.level}` : `${who()} · ${cls().name} ${classLevel()} · level ${charLevel()}`;
   win.querySelector('.lu-steps').replaceChildren(...list.map((s, n) => h('button', { class: (n === i ? 'on' : n < i ? 'done' : ''), disabled: !!L.applied,
     onclick: () => { L.stepId = s.id; render(); } }, h('i', {}, n + 1), s.name)));
-  body.replaceChildren(...[list[i].view()].flat(Infinity).filter(Boolean));
+  const room = L.shown === L.stepId && body.querySelector(':scope > .lu-room'); // dialog.js: room left under a search box's results
+  body.replaceChildren(...[list[i].view()].flat(Infinity).filter(Boolean), ...room ? [room] : []);
   body.scrollTop = keep;
   L.shown = L.stepId;
   const last = i === list.length - 1, go = d => { L.stepId = list[i + d].id; render(); };
@@ -1121,7 +1262,7 @@ function confirmBox(title, text, okLabel, onOk, noLabel = 'Not now') {
 // highest number for HP, and the background's Origin feat.
 function start(opts = {}) {
   const first = !C.classes.length, key = opts.key || (first ? 'fighter' : C.classes[0].key);
-  L = { key, isNew: first, first, fixedClass: !!opts.key, target: opts.target || null, picks: { ...opts.picks }, spells: {}, ui: {},
+  L = { key, isNew: first, first, fixedClass: !!opts.key, target: opts.target || null, picks: { ...opts.picks }, spells: {}, ui: {}, about: [],
     hp: { mode: 'fixed', roll: null }, off: new Set(), stepId: null,
     dirty() { return this.stepIndex > 0 || Object.keys(this.picks).length > 0 || this.isNew || this.hp.roll != null; } };
   if (first) presetFirst();

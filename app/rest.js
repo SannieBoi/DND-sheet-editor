@@ -6,7 +6,7 @@
    - Spell slots: the total is the sheet's slots box for that level, else the class tables (calc.slotsFor). Used = the
      number in the sheet's "Slots Expended" box (classic sheet: "SlotsRemaining 19"), else the official sheet's
      "expended" checkboxes plus sheetState.slotsUsed[level] (on sheets with neither, all of it is there).
-   - Class features: sheetState.used[id] = uses spent; the most you have comes from the class table (RESOURCES).
+   - Features: sheetState.used[id] = uses spent; the most you have comes from the class table (RESOURCES) or a species trait's `uses`.
    - Hit Point Dice: the total comes from your class levels (else the sheet's Hit Dice text). Spent = the official sheet's
      "spent" box, else sheetState.hitDiceSpent ({ die: count }).
    Rules (2024): a Short Rest lets you spend Hit Point Dice (each heals the die + CON modifier, at least 1); a Long Rest
@@ -33,7 +33,12 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const st = () => window.sheetState;
 const changed = () => document.dispatchEvent(new CustomEvent('resources-change'));
 const classLevel = key => (C.classes || []).find(c => c.key === key)?.level || 0;
+const subOf = key => (C.classes || []).find(c => c.key === key)?.sub?.name; // the subclass the sheet names (script.js)
 const mod = ab => C.mods?.[ab] ?? 0;
+const mod1 = ab => Math.max(1, mod(ab)); // "uses = your modifier (minimum of once)"
+// A number that grows at some class levels ({ 3: 4, 7: 5 }): the one at level l
+const byLevel = (map, l) => Object.entries(map).reduce((n, [k, v]) => +k <= l ? v : n, 0);
+const PSI_N = { 3: 4, 5: 6, 9: 8, 13: 10, 17: 12 }, PSI_D = { 3: 6, 5: 8, 11: 10, 17: 12 }; // Psionic Energy Dice: how many, which die
 
 // ---- Spell slots ------------------------------------------------------------------------------------
 const expended = l => (S.map?.slots?.[l]?.expended || []).filter(b => S.get(b) !== undefined);
@@ -47,10 +52,10 @@ const slotUsed = l => usedBox(l) ? Math.max(0, numIn(S.get(usedBox(l))) ?? 0)
 const slotsLeft = l => Math.max(0, slotTotal(l) - slotUsed(l));
 const slots = () => Array.from({ length: 9 }, (_, i) => i + 1).map(l => ({ level: l, total: slotTotal(l), used: slotUsed(l), left: slotsLeft(l) }))
   .filter(s => s.total || s.used);
-// Warlock Pact Magic: { level, slots } (back on a Short Rest)
+// Pact Magic (Warlock, the Blood Hunter's Profane Soul): { level, slots } (back on a Short Rest)
 function pact() {
-  const w = classLevel('warlock'), p = w && D.classes.warlock.levels[w - 1].spells.pact;
-  return p ? { level: p.slotLevel, slots: p.slots } : null;
+  const p = window.calc.pactOf(C.classes || []);
+  return p?.slots ? { level: p.slotLevel, slots: p.slots } : null;
 }
 
 // Set how many slots of a level are used: in the sheet's "Slots Expended" box (empty for 0), else the official sheet's
@@ -99,6 +104,55 @@ const RESOURCES = [
   { id: 'sorcerousRestoration', cls: 'sorcerer', name: 'Sorcerous Restoration', from: 5, max: () => 1, back: 'long', note: 'used on a Short Rest' },
   { id: 'magicalCunning', cls: 'warlock', name: 'Magical Cunning', from: 2, max: () => 1, back: 'long', note: 'half your Pact slots back' },
   { id: 'arcaneRecovery', cls: 'wizard', name: 'Arcane Recovery', max: () => 1, back: 'long', note: 'used on a Short Rest' },
+  { id: 'tinkersMagic', cls: 'artificer', name: "Tinker's Magic", max: () => mod1('INT'), back: 'long', note: 'make a simple item' },
+  { id: 'flashOfGenius', cls: 'artificer', name: 'Flash of Genius', from: 7, max: () => mod1('INT'), back: l => l >= 20 ? 'short' : l >= 14 ? 'short1' : 'long',
+    note: () => `+${mod1('INT')} to a failed check or save` },
+  // Blood Hunter: the Hemocraft modifier is taken as INT (WIS only with the DM's permission)
+  { id: 'bloodMaledict', cls: 'bloodhunter', name: 'Blood Maledict', max: (l, r) => r.bloodMaledict + (subOf('bloodhunter') === 'Order of the Ghostslayer' ? 1 : 0),
+    back: 'short', note: (l, r) => `amplify: 1d${r.hemocraftDie} Necrotic to you` },
+  { id: 'brandOfCastigation', cls: 'bloodhunter', name: 'Brand of Castigation', from: 6, max: () => 1, back: 'short' },
+  // Subclasses (sub: the subclass the sheet names)
+  { id: 'warriorOfTheGods', cls: 'barbarian', sub: 'Path of the Zealot', name: 'Warrior of the Gods', max: l => byLevel({ 3: 4, 6: 5, 12: 6, 17: 7 }, l), back: 'long', note: 'd12s to heal yourself' },
+  { id: 'wardingFlare', cls: 'cleric', sub: 'Light Domain', name: 'Warding Flare', max: () => mod1('WIS'), back: l => l >= 6 ? 'short' : 'long' },
+  { id: 'coronaOfLight', cls: 'cleric', sub: 'Light Domain', name: 'Corona of Light', from: 17, max: () => mod1('WIS'), back: 'long' },
+  { id: 'warPriest', cls: 'cleric', sub: 'War Domain', name: 'War Priest', max: () => mod1('WIS'), back: 'short', note: 'Bonus Action attack' },
+  { id: 'deathsDoor', cls: 'cleric', sub: 'Grave Domain', name: "Sentinel at Death's Door", from: 6, max: () => mod1('WIS'), back: 'long' },
+  { id: 'starMap', cls: 'druid', sub: 'Circle of the Stars', name: 'Guiding Bolt (Star Map)', max: () => mod1('WIS'), back: 'long', note: 'without a slot' },
+  { id: 'cosmicOmen', cls: 'druid', sub: 'Circle of the Stars', name: 'Cosmic Omen', from: 6, max: () => mod1('WIS'), back: 'long' },
+  { id: 'moonlightStep', cls: 'druid', sub: 'Circle of the Moon', name: 'Moonlight Step', from: 10, max: () => mod1('WIS'), back: 'long' },
+  { id: 'superiority', cls: 'fighter', sub: 'Battle Master', name: 'Superiority Dice', max: l => byLevel({ 3: 4, 7: 5, 15: 6 }, l), back: 'short', note: l => 'd' + byLevel({ 3: 8, 10: 10, 18: 12 }, l) },
+  { id: 'psiFighter', cls: 'fighter', sub: 'Psi Warrior', name: 'Psionic Energy Dice', max: l => byLevel(PSI_N, l), back: 'short1', note: l => 'd' + byLevel(PSI_D, l) },
+  { id: 'arcaneShot', cls: 'fighter', sub: 'Arcane Archer', name: 'Arcane Shot', max: () => mod1('INT'), back: 'short', note: l => 'd' + byLevel({ 3: 6, 10: 8, 15: 10, 18: 12 }, l) },
+  { id: 'despairingStrike', cls: 'fighter', sub: 'Sorrow Knight', name: 'Despairing Strike Dice', max: l => byLevel({ 3: 3, 10: 4, 15: 5 }, l), back: 'short', note: l => 'd' + byLevel({ 3: 8, 10: 10, 15: 12 }, l) },
+  { id: 'groupRecovery', cls: 'fighter', sub: 'Banneret', name: 'Group Recovery', max: () => 1, back: 'short' },
+  { id: 'healingHarm', cls: 'monk', sub: 'Warrior of Mercy', name: 'Flurry of Healing and Harm', from: 11, max: () => mod1('WIS'), back: 'long' },
+  { id: 'gloriousDefense', cls: 'paladin', sub: 'Oath of Glory', name: 'Glorious Defense', from: 15, max: () => mod1('CHA'), back: 'long' },
+  { id: 'elementalRebuke', cls: 'paladin', sub: 'Oath of the Noble Genies', name: 'Elemental Rebuke', from: 15, max: () => mod1('CHA'), back: 'long' },
+  { id: 'dreadfulStrike', cls: 'ranger', sub: 'Gloom Stalker', name: 'Dreadful Strike', max: () => mod1('WIS'), back: 'long', note: l => (l >= 11 ? '2d8' : '2d6') + ' Psychic' },
+  { id: 'mistyWanderer', cls: 'ranger', sub: 'Fey Wanderer', name: 'Misty Step (Misty Wanderer)', from: 15, max: () => mod1('WIS'), back: 'long', note: 'without a slot' },
+  { id: 'chillingRetribution', cls: 'ranger', sub: 'Winter Walker', name: 'Chilling Retribution', from: 11, max: () => mod1('WIS'), back: 'long' },
+  { id: 'psiRogue', cls: 'rogue', sub: 'Soulknife', name: 'Psionic Energy Dice', max: l => byLevel(PSI_N, l), back: 'short1', note: l => 'd' + byLevel(PSI_D, l) },
+  { id: 'wails', cls: 'rogue', sub: 'Phantom', name: 'Wails from the Grave', max: () => mod1('DEX'), back: 'long' },
+  { id: 'bloodthirst', cls: 'rogue', sub: 'Scion of the Three', name: 'Bloodthirst', max: () => mod1('INT'), back: l => l >= 17 ? 'short1' : 'long' },
+  { id: 'restoreBalance', cls: 'sorcerer', sub: 'Clockwork Sorcery', name: 'Restore Balance', max: () => mod1('CHA'), back: 'long' },
+  { id: 'tidesOfChaos', cls: 'sorcerer', sub: 'Wild Magic Sorcery', name: 'Tides of Chaos', max: () => 1, back: 'long', note: 'also back when you cast a Sorcerer spell with a slot' },
+  { id: 'stepsOfTheFey', cls: 'warlock', sub: 'Archfey Patron', name: 'Misty Step (Steps of the Fey)', max: () => mod1('CHA'), back: 'long', note: 'without a slot' },
+  { id: 'healingLight', cls: 'warlock', sub: 'Celestial Patron', name: 'Healing Light', max: l => 1 + l, back: 'long', note: () => `d6s, up to ${mod1('CHA')} at once` },
+  { id: 'formOfDread', cls: 'warlock', sub: 'Undead Patron', name: 'Form of Dread', max: () => mod1('CHA'), back: 'long' },
+  { id: 'portent', cls: 'wizard', sub: 'Diviner', name: 'Portent rolls', max: l => l >= 14 ? 3 : 2, back: 'long', note: 'd20s rolled after a Long Rest' },
+  { id: 'bladesong', cls: 'wizard', sub: 'Bladesinger', name: 'Bladesong', max: () => mod1('INT'), back: 'long', note: 'one back with Arcane Recovery' },
+  { id: 'benignTransposition', cls: 'wizard', sub: 'Conjurer', name: 'Benign Transposition', max: () => mod1('INT'), back: 'long' },
+  { id: 'hypnoticPresence', cls: 'wizard', sub: 'Enchanter', name: 'Hypnotic Presence', max: () => mod1('INT'), back: 'long' },
+  { id: 'arcaneJolt', cls: 'artificer', sub: 'Battle Smith', name: 'Arcane Jolt', from: 9, max: () => mod1('INT'), back: 'long' },
+  { id: 'mappingMagic', cls: 'artificer', sub: 'Cartographer', name: 'Faerie Fire (Mapping Magic)', max: () => mod1('INT'), back: 'long', note: 'without a slot' },
+  { id: 'restorativeReagents', cls: 'artificer', sub: 'Alchemist', name: 'Restorative Reagents', from: 9, max: () => mod1('INT'), back: 'long', note: 'Lesser Restoration without a slot' },
+  { id: 'joltToLife', cls: 'artificer', sub: 'Reanimator', name: 'Jolt to Life', max: () => mod1('INT'), back: 'long' },
+  { id: 'hybrid', cls: 'bloodhunter', sub: 'Order of the Lycan', name: 'Hybrid Transformation', max: l => l >= 18 ? 0 : l >= 11 ? 2 : 1, back: 'short' },
+  { id: 'aetherWalk', cls: 'bloodhunter', sub: 'Order of the Ghostslayer', name: 'Aether Walk', from: 7, max: l => l >= 15 ? 2 : 1, back: 'short' },
+  { id: 'strangeMetabolism', cls: 'bloodhunter', sub: 'Order of the Mutant', name: 'Strange Metabolism', from: 7, max: () => 1, back: 'long' },
+  { id: 'exaltedMutation', cls: 'bloodhunter', sub: 'Order of the Mutant', name: 'Exalted Mutation', from: 18, max: () => mod1('INT'), back: 'long' },
+  { id: 'revealedArcana', cls: 'bloodhunter', sub: 'Order of the Profane Soul', name: 'Revealed Arcana', from: 7, max: () => 1, back: 'long' },
+  { id: 'unsealedArcana', cls: 'bloodhunter', sub: 'Order of the Profane Soul', name: 'Unsealed Arcana', from: 15, max: () => 1, back: 'long' },
   { id: 'lucky', feat: 'Lucky', name: 'Luck Points', max: () => C.profBonus || 2, back: 'long' }
 ];
 const BACK = { short: 'back on a Short or Long Rest', short1: '1 back on a Short Rest, all on a Long Rest', long: 'back on a Long Rest' };
@@ -109,7 +163,8 @@ function resources() {
     let lvl = 0, row = {};
     if (r.cls) {
       lvl = classLevel(r.cls);
-      if (lvl < (r.from || 1)) continue;
+      const from = r.from || (r.sub ? D.classes[r.cls].features.find(f => f.choice?.type === 'subclass').lvl : 1); // a subclass's from its level
+      if (lvl < from || r.sub && subOf(r.cls) !== r.sub) continue;
       row = D.classes[r.cls].levels[lvl - 1];
     } else if (!(C.feats || []).includes(r.feat)) continue;
     const max = r.max(lvl, row);
@@ -117,6 +172,13 @@ function resources() {
     const used = Math.min(max, st().used?.[r.id] || 0), note = typeof r.note === 'function' ? r.note(lvl, row) : r.note;
     out.push({ ...r, name: r.id.startsWith('channel') && two() ? `${r.name} (${D.classes[r.cls].name})` : r.name,
       lvl, max, used, left: max - used, note, back: typeof r.back === 'function' ? r.back(lvl) : r.back });
+  }
+  // species traits with limited uses (species.js / species-more.js features[].uses), from the trait's character level
+  const sp = C.speciesData;
+  for (const f of sp?.features || []) {
+    if (!f.uses || f.lvl > (C.level || 1)) continue;
+    const id = 'sp:' + f.name, max = f.uses.n === 'PB' ? C.profBonus || 2 : f.uses.n, used = Math.min(max, st().used?.[id] || 0);
+    out.push({ id, name: f.name, species: sp.name, max, used, left: max - used, note: sp.name, back: f.uses.back });
   }
   return out;
 }
@@ -233,7 +295,7 @@ function view() {
       h('button', { onclick: () => openRest('short') }, h('b', {}, 'Short Rest'), h('small', {}, '1 hour')),
       h('button', { class: 'go', onclick: () => openRest('long') }, h('b', {}, 'Long Rest'), h('small', {}, '8 hours'))),
     sl.length ? [h('h4', {}, 'Spell slots'), h('div', { class: 'reslist' }, sl)] : null,
-    rs.length ? [h('h4', {}, 'Class features'), h('div', { class: 'reslist' }, rs.map(r =>
+    rs.length ? [h('h4', {}, 'Features'), h('div', { class: 'reslist' }, rs.map(r =>
       counter(r.name, r.left, r.max, left => setUsed(r.id, r.max - left), [r.note, BACK[r.back]].filter(Boolean).join(' · '))))] : null,
     hd.dice.length ? [h('h4', {}, 'Hit Point Dice'), h('div', { class: 'reslist' }, hd.dice.map(d =>
       counter('d' + d.die, d.left, d.total, left => setHitDieLeft(d.die, left), 'spend them on a Short Rest')))] : null,
@@ -262,7 +324,7 @@ function arcanePlan(used) {
 }
 
 // Every change the rest makes: { group, id, label, from, to, note, apply (none = a note only), off (unticked at first) }
-const GROUPS = ['Hit Points', 'Spell slots', 'Class features', 'Conditions', 'Good to know'];
+const GROUPS = ['Hit Points', 'Spell slots', 'Features', 'Conditions', 'Good to know'];
 function changes() {
   const rows = [], add = (group, r) => rows.push({ group, ...r }), long = R.kind === 'long';
   const hp = hpNow(), max = hpMax(), hd = hitDice(), res = resources();
@@ -276,7 +338,7 @@ function changes() {
     const levels = Object.entries(usedNow).filter(([, n]) => n > 0);
     if (levels.length) add('Spell slots', { id: 'slots', label: 'Spell slots', from: levels.map(([l, n]) => `level ${l} ×${n} used`).join(', '), to: 'all back',
       apply: () => { for (const [l] of levels) writeSlotUsed(+l, 0); } });
-    for (const r of res) if (r.used) add('Class features', { id: 'res:' + r.id, label: r.name, from: `${r.left}/${r.max}`, to: `${r.max}/${r.max}`, apply: () => writeUsed(r.id, 0) });
+    for (const r of res) if (r.used) add('Features', { id: 'res:' + r.id, label: r.name, from: `${r.left}/${r.max}`, to: `${r.max}/${r.max}`, apply: () => writeUsed(r.id, 0) });
     const ex = exhaustion();
     if (ex) {
       const lvl = Math.max(1, Math.min(6, +ex.level || 1));
@@ -321,13 +383,13 @@ function changes() {
     const sp = res.find(r => r.id === 'sorceryPoints'), sr = res.find(r => r.id === 'sorcerousRestoration');
     if (sp?.used && sr?.left) {
       const back = Math.min(sp.used, Math.floor(classLevel('sorcerer') / 2));
-      add('Class features', { id: 'restoration', label: 'Sorcerous Restoration', off: true, from: `${sp.left}/${sp.max} Sorcery Points`, to: `${sp.left + back}/${sp.max}`,
+      add('Features', { id: 'restoration', label: 'Sorcerous Restoration', off: true, from: `${sp.left}/${sp.max} Sorcery Points`, to: `${sp.left + back}/${sp.max}`,
         note: 'once per Long Rest. Tick it to use it now.', apply: () => { writeUsed('sorceryPoints', sp.used - back); writeUsed('sorcerousRestoration', 1); } });
     }
     for (const r of res) {
       if (!r.used || r.back === 'long') continue;
       const used = r.back === 'short' ? 0 : r.used - 1;
-      add('Class features', { id: 'res:' + r.id, label: r.name, from: `${r.left}/${r.max}`, to: `${r.max - used}/${r.max}`, note: BACK[r.back], apply: () => writeUsed(r.id, used) });
+      add('Features', { id: 'res:' + r.id, label: r.name, from: `${r.left}/${r.max}`, to: `${r.max - used}/${r.max}`, note: BACK[r.back], apply: () => writeUsed(r.id, used) });
     }
   }
   if (st().mode === 'marble') add('Good to know', { label: 'Killing Marble', note: `This rest takes ${long ? '8 hours' : '1 hour'}. The marble isn't changed here: use "An hour passes" on the Becoming Marble page for each hour.` });

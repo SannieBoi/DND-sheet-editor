@@ -69,7 +69,7 @@ const priority = key => ABS.map((ab, i) => [ab, CR.standardArrayByClass[key][i]]
 const lineageFeature = () => (species()?.features || []).find(f => f.choice?.type === 'lineage');
 
 function fresh() {
-  return { step: 0, sheet: 'classic', cls: null, level: 1, bg: null, bgTool: '', species: null, lineage: '', size: '', spellAbility: '',
+  return { step: 0, sheet: 'classic', cls: null, level: 1, bg: null, bgTool: '', species: null, lineage: '', size: '', spellAbility: '', about: [],
     method: 'array', assign: {}, rolls: null, buy: null, manual: null, bonus: { mode: 2, plus2: null, plus1: null },
     eq: { cls: 0, bg: 0, picks: {} }, extraGold: null,
     d: { name: '', player: '', alignment: '', xp: '', langs: ['', ''], age: '', height: '', weight: '', eyes: '', skin: '', hair: '',
@@ -131,12 +131,17 @@ function weaponsIn(items) {
 }
 const armorIn = items => D.armor.filter(a => items.some(it => has(it.text, a.name))).sort((a, b) => b.ac - a.ac)[0] || null;
 const shieldIn = items => items.some(it => /^shield$/i.test(it.text));
+// The best AC: worn armor, else the best of 10 + DEX, the class's Unarmored Defense and the species' natural armor (a
+// Lizardfolk's also beats weaker armor, a Tortle can't wear any); then Shield and the Warforged's +1
 function armorClass(items, scores) {
-  const a = armorIn(items), dex = modOf(scores.DEX ?? 10), shield = shieldIn(items) ? 2 : 0;
-  if (a) return { ac: a.ac + (a.dex === 'full' ? dex : a.dex === 'max2' ? Math.min(dex, 2) : 0) + shield, how: `${a.name}${shield ? ' + Shield' : ''}` };
-  if (M.cls === 'barbarian') return { ac: 10 + dex + modOf(scores.CON ?? 10) + shield, how: 'Unarmored Defense (10 + DEX + CON)' + (shield ? ' + Shield' : '') };
-  if (M.cls === 'monk' && !shield) return { ac: 10 + dex + modOf(scores.WIS ?? 10), how: 'Unarmored Defense (10 + DEX + WIS)' };
-  return { ac: 10 + dex + shield, how: 'no armor (10 + DEX)' + (shield ? ' + Shield' : '') };
+  const a = armorIn(items), m = ab => modOf(scores[ab] ?? 10), dex = m('DEX'), shield = shieldIn(items) ? 2 : 0, sp = species(), nat = sp?.ac;
+  const natural = nat && { ac: nat.base + (nat.ability ? m(nat.ability) : 0), how: `${nat.name} (${nat.base}${nat.ability ? ' + ' + nat.ability : ''})` };
+  const worn = a && !nat?.noArmor && { ac: a.ac + (a.dex === 'full' ? dex : a.dex === 'max2' ? Math.min(dex, 2) : 0), how: a.name };
+  const options = worn ? [worn, nat?.withArmor && natural] : [{ ac: 10 + dex, how: 'no armor (10 + DEX)' }, natural,
+    M.cls === 'barbarian' && { ac: 10 + dex + m('CON'), how: 'Unarmored Defense (10 + DEX + CON)' },
+    M.cls === 'monk' && !shield && { ac: 10 + dex + m('WIS'), how: 'Unarmored Defense (10 + DEX + WIS)' }];
+  const best = options.filter(Boolean).reduce((x, y) => y.ac > x.ac ? y : x), bonus = sp?.acBonus || 0;
+  return { ac: best.ac + shield + bonus, how: best.how + (shield ? ' + Shield' : '') + (bonus ? ` + ${bonus} (${sp.name})` : '') };
 }
 // "Priest's Pack" -> "Priest's Pack (Backpack, Blanket, ...)"
 const withPack = t => CR.packs[t] ? `${t} (${CR.packs[t].join(', ')})` : t;
@@ -147,6 +152,21 @@ const card = (on, onclick, title, sub, tag) => h('button', { class: 'lu-card' + 
   h('b', {}, title, tag ? h('small', { class: 'lu-src' }, tag) : null), sub ? h('span', {}, sub) : null);
 const chip = (label, on, onclick, title) => h('button', { class: 'chip' + (on ? ' on' : ''), onclick, title }, label);
 const set = (fn) => () => { fn(); render(); };
+const cap = s => s[0].toUpperCase() + s.slice(1);
+// The ▾ button on a card (dialog.js): a few lines about the class, background or species (data/summaries.js) and its rules
+const about = (id, label, info, el) => window.aboutCard(el, { open: M.about.includes(id), label, info,
+  toggle: set(() => { M.about = M.about.includes(id) ? M.about.filter(x => x !== id) : [...M.about, id]; }) });
+const fact = (label, text) => h('span', { class: 'lu-fact' }, h('em', {}, label), ' ', text);
+function classInfo(c) {
+  const at = c.features.find(f => f.choice?.type === 'subclass')?.lvl;
+  return [c.summary, fact('Level 1:', `${c.levels[0].features.join(', ')}.${at ? ` Subclass at level ${at}.` : ''}`)];
+}
+function backgroundInfo(b) {
+  const feat = D.feats.find(f => f.name === b.feat);
+  return [b.summary, feat?.summary ? fact(`${b.feat}${b.featList ? ` (${cap(b.featList)})` : ''}:`, feat.summary) : null];
+}
+const speciesInfo = s => s.brief ? [`From ${s.source}. That book isn't on wikidot, so only the names of its traits are in the data.`]
+  : [s.summary, ...s.features.map(f => fact(`${f.name}${f.lvl > 1 ? ` (level ${f.lvl})` : ''}:`, f.text))];
 
 function sheetStep() {
   return [h('p', { class: 'lu-lead' }, 'Which character sheet do you want to fill in?'),
@@ -160,8 +180,8 @@ function classStep() {
   return [h('p', { class: 'lu-lead' }, 'Choose a class.'),
     h('div', { class: 'lu-cards compact' }, keys.map(k => {
       const c = D.classes[k];
-      return card(M.cls === k, set(() => { if (M.cls !== k) { M.cls = k; M.eq.cls = 0; autoAssign(M.method === 'roll' && M.rolls ? M.rolls.map(r => r.total) : CR.standardArray); if (M.method === 'buy') M.buy = arrayScores(); defaultBonus(); } }),
-        c.name, `d${c.hitDie} Hit Die · ${c.primaryAbility} · saves ${c.saves.join(', ')} · armor: ${(c.armorTraining || []).join(', ') || 'none'}`);
+      return about('class:' + k, c.name, classInfo(c), card(M.cls === k, set(() => { if (M.cls !== k) { M.cls = k; M.eq.cls = 0; autoAssign(M.method === 'roll' && M.rolls ? M.rolls.map(r => r.total) : CR.standardArray); if (M.method === 'buy') M.buy = arrayScores(); defaultBonus(); } }),
+        c.name, `d${c.hitDie} Hit Die · ${c.primaryAbility} · saves ${c.saves.join(', ')} · armor: ${(c.armorTraining || []).join(', ') || 'none'}`));
     })),
     h('div', { class: 'lu-pick' }, pickHead('Starting level'),
       h('div', { class: 'mk-level' },
@@ -179,29 +199,39 @@ function backgroundStep() {
     h('div', { class: 'lu-cards compact' }, D.backgrounds.map(x => {
       const skills = x.proficiencies.filter(p => p.startsWith('Skill: ')).map(p => p.slice(7)).join(', ');
       const tool = x.proficiencies.find(p => p.startsWith('Tool: '))?.slice(6) || (x.toolChoice ? `one ${x.toolChoice.from[0]}` : '');
-      return card(M.bg === x.name, set(() => { if (M.bg !== x.name) { M.bg = x.name; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), x.name,
-        `${x.abilityScores.join(', ')} · ${x.feat}${x.featList ? ` (${x.featList[0].toUpperCase() + x.featList.slice(1)})` : ''} · ${skills}${tool ? ' · ' + tool : ''}`,
-        x.source ? 'PHB' : null);
+      return about('bg:' + x.name, x.name, backgroundInfo(x), card(M.bg === x.name, set(() => { if (M.bg !== x.name) { M.bg = x.name; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), x.name,
+        `${x.abilityScores.join(', ')} · ${x.feat}${x.featList ? ` (${cap(x.featList)})` : ''} · ${skills}${tool ? ' · ' + tool : ''}`,
+        x.source ? 'PHB' : null));
     })),
     tools ? h('div', { class: 'lu-pick' }, pickHead(`Your ${b.toolChoice.from[0]}`),
       h('select', { class: 'lu-wide', onchange: e => { M.bgTool = e.target.value; render(); } },
         h('option', { value: '' }, `Choose one…`), tools.map(t => h('option', { value: t, selected: M.bgTool === t }, t)))) : null];
 }
 
+// The free rules' species and the Aasimar as cards; a search at the top finds every species (most with their rules,
+// third-party ones as names only) and shows them in their place, right under it
+const PHB = "Player's Handbook (2024)";
 function speciesStep() {
-  const full = D.species.filter(s => !s.brief), more = D.species.filter(s => s.brief), sp = species();
-  const q = (M.q || '').trim().toLowerCase();
-  const found = q ? more.filter(s => s.name.toLowerCase().includes(q)).slice(0, 12) : [];
-  const lf = lineageFeature(), subs = sp?.subspecies || [];
+  const main = D.species.filter(s => !s.source || s.source === PHB), sp = species(), q = (M.q || '').trim().toLowerCase();
+  // best first: the name starts with it, a word of a name does, a name holds it, the book does
+  const rank = s => {
+    const names = [s.name, ...s.aliases || []].map(n => n.toLowerCase());
+    return names[0].startsWith(q) ? 0 : names.some(n => n.split(/[\s(-]+/).some(w => w.startsWith(q))) ? 1 : names.some(n => n.includes(q)) ? 2
+      : (s.source || '').toLowerCase().includes(q) ? 3 : -1;
+  };
+  const found = q ? D.species.map(s => [s, rank(s)]).filter(x => x[1] >= 0)
+    .sort((a, b) => a[1] - b[1] || main.includes(b[0]) - main.includes(a[0]) || a[0].name.localeCompare(b[0].name)).map(x => x[0]) : main;
+  const shown = found.slice(0, 30), lf = lineageFeature(), subs = sp?.subspecies || [];
   const pick = s => set(() => { if (M.species !== s.name) { M.species = s.name; M.lineage = ''; M.size = /or/.test(s.size || '') ? '' : s.size || 'Medium'; M.spellAbility = ''; } });
-  return [h('p', { class: 'lu-lead' }, 'Choose a species.'),
-    h('div', { class: 'lu-cards compact' }, full.map(s => card(M.species === s.name, pick(s), s.name, `${s.size} · ${s.speed} ft · ${s.traits.join(', ')}`, s.source ? 'PHB' : null))),
-    h('div', { class: 'lu-pick' }, pickHead('More species (names and trait names only)'),
-      h('input', { type: 'search', class: 'lu-wide mk-q', placeholder: 'Search 160+ more species', value: M.q || '', 'data-keep': 'q',
-        oninput: e => { M.q = e.target.value; render(); } }),
-      found.length ? h('div', { class: 'lu-cards compact' }, found.map(s => card(M.species === s.name, pick(s), s.name, s.traits.join(', '), s.source))) : null,
-      sp?.brief && !found.includes(sp) ? h('div', { class: 'lu-cards compact' }, card(true, null, sp.name, sp.traits.join(', '), sp.source)) : null),
-    sp?.brief ? h('p', { class: 'lu-warn' }, `${sp.name}'s rules aren't in the free rules data: its traits are named, but write what they do (and its size and speed) yourself.`) : null,
+  const sub = s => s.brief ? `Names only · ${s.traits.join(', ')}` : `${s.size} · ${s.speed} ft · ${s.traits.join(', ')}`;
+  const speciesCard = s => about('species:' + s.name, s.name, speciesInfo(s), card(M.species === s.name, pick(s), s.name, sub(s), s.source === PHB ? 'PHB' : s.source));
+  return [h('p', { class: 'lu-lead' }, `Choose a species. Below are the free rules' species and the Aasimar; search to find the other ${D.species.length - main.length}.`),
+    h('input', { type: 'search', class: 'lu-wide mk-q', placeholder: `Search all ${D.species.length} species (name or book)`, value: M.q || '', 'data-keep': 'q',
+      oninput: e => { M.q = e.target.value; render(); } }),
+    shown.length ? h('div', { class: 'lu-cards compact' }, shown.map(speciesCard)) : h('p', { class: 'lu-note' }, 'No species by that name or book.'),
+    found.length > shown.length ? h('p', { class: 'lu-note' }, `${found.length - shown.length} more match: type more of the name.`) : null,
+    sp && !shown.includes(sp) ? h('div', { class: 'lu-cards compact mk-chosen' }, speciesCard(sp)) : null,
+    sp?.brief ? h('p', { class: 'lu-warn' }, `${sp.name}'s rules aren't in the data (its book isn't on wikidot): its traits are named, but write what they do (and its size and speed) yourself.`) : null,
     subs.length ? h('div', { class: 'lu-pick' }, pickHead(lf?.name || 'Lineage'), h('p', { class: 'lu-note' }, lf?.text || ''),
       h('div', { class: 'lu-opts' }, subs.map(x => h('button', { class: 'lu-opt' + (M.lineage === short(x.name) ? ' on' : ''), onclick: set(() => { M.lineage = short(x.name); }) },
         h('b', {}, short(x.name)), h('small', {}, x.traits.map(t => t.lvl > 1 ? `${short(t.name)} (level ${t.lvl})` : short(t.name)).join(', ')))))) : null,
@@ -271,7 +301,7 @@ function rollAll() {
 function equipmentStep() {
   const c = cls(), b = bg(), fin = finalScores();
   const option = (opt, i, prefix, on, pickIt) => card(on, set(pickIt), `Option ${'ABC'[i]}`,
-    opt.items ? `${packageItems(opt, prefix).map(x => x.text).join(', ')}, and ${opt.gp} GP` : `${opt.gp} GP to buy your own gear`);
+    opt.items ? `${packageItems(opt, prefix).map(x => x.text).join(', ')}${opt.gp ? `, and ${opt.gp} GP` : ''}` : `${opt.gp} GP to buy your own gear`); // the Blood Hunter's packages have no gold
   const choices = (opt, prefix) => packageItems(opt, prefix).filter(x => typeof x.raw === 'object' && x.raw.choose).map(x => h('div', { class: 'lu-pick' },
     pickHead(x.raw.choose.join(' or ') + (x.raw.proficiency ? ' (you will be proficient with it)' : '')),
     h('select', { class: 'lu-wide', onchange: e => { M.eq.picks[x.key] = e.target.value; render(); } },
@@ -445,7 +475,8 @@ function render() {
   win.querySelector('.lu-sub').textContent = [M.cls && cls().name, M.species, M.bg].filter(Boolean).join(' · ') || 'A new character, step by step';
   win.querySelector('.lu-steps').replaceChildren(...STEPS.map((s, n) => h('button', { class: n === i ? 'on' : n < i ? 'done' : '', onclick: () => { M.step = n; render(); } },
     h('i', {}, n + 1), s.name)));
-  body.replaceChildren(...[STEPS[i].view()].flat(Infinity).filter(Boolean));
+  const room = M.shown === i && body.querySelector(':scope > .lu-room'); // dialog.js: room left under a search box's results
+  body.replaceChildren(...[STEPS[i].view()].flat(Infinity).filter(Boolean), ...room ? [room] : []);
   body.scrollTop = keep;
   M.shown = i;
   if (keepKey) { const n = body.querySelector(`[data-keep="${keepKey}"]`); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* not text */ } } }

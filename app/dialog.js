@@ -53,4 +53,48 @@ window.draggable = (win, handle) => {
   return place;
 };
 addEventListener('resize', () => { for (const w of document.querySelectorAll('.lu')) w.place?.(w.offsetLeft, w.offsetTop); });
+
+/* A choice card (a .lu-card button) with a round ▾ button on the right of its title that drops down a few lines about the
+   thing (window.aboutCard): aboutCard(card, { open, label, info: [strings or elements], toggle }) returns the card in a
+   wrapper (a button can't hold another button). The lines go at the end of the card, so its usual text stays where it was.
+   The caller keeps which cards are open and redraws in toggle(). */
+let opened = null; // the card that just opened: only its lines slide in (a redraw doesn't replay that)
+window.aboutCard = (card, { open, label, info, toggle }) => {
+  const lines = (info || []).filter(Boolean);
+  if (!lines.length) return card;
+  if (open) {
+    card.classList.add('open');
+    card.append(h('span', { class: 'lu-about' + (opened === label ? ' fresh' : '') }, lines.map(x => typeof x === 'string' ? h('span', {}, x) : x)));
+    if (opened === label) opened = null;
+  }
+  return h('div', { class: 'lu-cardwrap' + (open ? ' open' : '') }, card,
+    h('button', { class: 'lu-more', 'aria-expanded': String(!!open), 'aria-label': `About ${label}`, title: open ? 'Hide' : `About ${label}`,
+      onclick: () => { opened = open ? null : label; toggle(); } }, '▾'));
+};
+
+/* A search box low in a window: as you type, the window scrolls it up near its top, so what it finds shows right under it.
+   When the window is too short to scroll that far, empty room is added at its end (.lu-room; a redraw of the same step
+   keeps it, see render() in levelup.js / maker.js). Fewer results don't pull the window back down either: the room grows
+   to keep the place. */
+const SEARCH = '.lu-body input[type=search]';
+let before = null, goal = null; // goal: where the last move takes that window (the smooth scroll takes a moment)
+document.addEventListener('input', e => { // capture: before the box's own handler changes the list
+  before = e.target.matches?.(SEARCH) ? e.target.closest('.lu-body').scrollTop : null;
+}, true);
+document.addEventListener('input', e => {
+  if (before == null) return;
+  const q = e.target.isConnected ? e.target : document.activeElement; // the maker redraws the whole step on each key
+  const body = q?.matches(SEARCH) && q.closest('.lu-body');
+  if (!body) return;
+  let room = body.querySelector(':scope > .lu-room');
+  if (!room) { room = body.appendChild(h('div', { class: 'lu-room', 'aria-hidden': 'true' })); goal = null; } // another step
+  const content = body.scrollHeight - room.offsetHeight, top = el => el.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+  const near = q.closest('.lu-pick, .lu-feat'), anchor = near && top(q) - top(near) < Math.min(140, body.clientHeight / 4) ? near : q; // its heading too, when close
+  const low = top(q) - before > body.clientHeight * .4;
+  if (low) goal = { body, top: Math.max(0, top(anchor) - 8) };
+  const keep = Math.max(before, goal?.body === body ? goal.top : 0);
+  room.style.height = Math.max(0, keep + body.clientHeight - content) + 'px';
+  if (low) body.scrollTo({ top: goal.top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  else if (body.scrollTop < before) body.scrollTop = before; // the list got shorter: stay where you were
+});
 })();

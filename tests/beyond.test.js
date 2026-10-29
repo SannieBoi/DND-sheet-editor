@@ -50,16 +50,16 @@ async function loadSheet(build) {
     add('Wpn Name', 20, 600, 120, 'Greatsword'); add('Wpn1 AtkBonus', 150, 600, 40, '+5'); add('Wpn1 Damage', 200, 600, 120, '2d6+3 slashing');
     add('Features and Traits', 20, 40, 280, ['Second Wind (Fighter 1): Bonus Action heal.', 'Archery (Fighting Style, Fighter 1): +2 ranged.',
       'Indomitable (Fighter 9): reroll a failed save.', 'Sneak Attack: 1d6 extra damage.', 'Extra Attack: attack twice.', 'Expertise: Athletics',
-      'Psionic Power (Fighter 3): psi dice.', 'Draconic Flight: wings.'].join('\n'), true, 300);
+      'Rune Carver (Fighter 3): runes.', 'Draconic Flight: wings.'].join('\n'), true, 300);
     add('Feat+Traits', 320, 40, 260, 'Great Weapon Master: +PB damage with Heavy weapons\nAlert', true, 200);
   });
   ok(!character.feats.includes('Great Weapon Master') && character.feats.includes('Alert') && character.feats.includes('Archery'),
     'a level 4 feat on a level 1 sheet does nothing; Alert (Origin) and Archery (Fighter 1 has Fighting Style) count: ' + character.feats.join(', '));
   ok(JSON.stringify(ids()) === JSON.stringify(['feat:Great Weapon Master', 'feature:draconicflight', 'feature:extraattack', 'feature:indomitable',
-    'feature:psionicpower', 'feature:sneakattack']), 'out of reach: GWM, Indomitable (Fighter 9), Extra Attack (Fighter 5), Sneak Attack (Rogue), "(Fighter 3)", Draconic Flight (level 5): ' + ids().join(', '));
+    'feature:runecarver', 'feature:sneakattack']), 'out of reach: GWM, Indomitable (Fighter 9), Extra Attack (Fighter 5), Sneak Attack (Rogue), "(Fighter 3)", Draconic Flight (level 5): ' + ids().join(', '));
   const why = id => character.beyond.find(b => b.id === id)?.why || '';
   ok(/level 4 and up; the sheet says level 1/.test(why('feat:Great Weapon Master')) && /^Fighter level 9; the sheet says Fighter 1/.test(why('feature:indomitable'))
-    && /^a Rogue feature; no Rogue levels/.test(why('feature:sneakattack')) && /^written as Fighter 3/.test(why('feature:psionicpower'))
+    && /^a Rogue feature; no Rogue levels/.test(why('feature:sneakattack')) && /^written as Fighter 3/.test(why('feature:runecarver'))
     && /Dragonborn trait from level 5/.test(why('feature:draconicflight')), 'each says why');
   ok(!ids().includes('feature:expertise') && !ids().includes('feature:secondwind'), 'Expertise (other things give it too) and Second Wind (Fighter 1) are fine');
 
@@ -73,7 +73,7 @@ async function loadSheet(build) {
   ok(/^Great Weapon Master \[DM allowed\]: \+PB/.test(val('Feat+Traits')) && /\nIndomitable \[DM allowed\] \(Fighter 9\): reroll/.test(val('Features and Traits')),
     'kept: "[DM allowed]" written right after each name');
   ok(character.feats.includes('Great Weapon Master') && character.beyond.filter(b => b.kept).length === 2, 'Great Weapon Master counts now (kept)');
-  ok(JSON.stringify([...window.sheetState.beyondIgnored].sort()) === JSON.stringify(['feature:draconicflight', 'feature:extraattack', 'feature:psionicpower', 'feature:sneakattack']),
+  ok(JSON.stringify([...window.sheetState.beyondIgnored].sort()) === JSON.stringify(['feature:draconicflight', 'feature:extraattack', 'feature:runecarver', 'feature:sneakattack']),
     'the unticked ones are remembered as ignored (in the PDF state)');
   await wait(400);
   ok(!dialog(), 'nothing more is asked');
