@@ -1,7 +1,7 @@
 # D&D Sheet Viewer — project notes for Claude
 
 Keep this file current: update it at the end of any change that adds files, globals, events, rules decisions or open items.
-`README.txt` is the user's guide (its top "Short tutorial" and "Short Killing Marble" parts were written by the user: keep
+`README.md` is the user's guide (its top "Short tutorial" and "Short Killing Marble" parts were written by the user: keep
 them as they are; the user wants Killing Marble kept brief there). This file is for working on the code.
 
 Git: github.com/SannieBoi/DND-sheet-editor, branch `main`. `.gitignore` leaves out tests/_out and __pycache__.
@@ -14,7 +14,7 @@ Plain `<script>` tags only (no modules/fetch: file:// blocks them). Every script
 
 ## Files (load order in index.html)
 Folders (user's wish): `lib/` libraries, `data/` rules data + sheet maps, `app/` the tool's own scripts, `marble/` Killing
-Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root. Paths below are inside those folders.
+Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root. Paths below are inside those folders.
 `app/script.js` sets pdf.js `workerSrc = 'lib/pdf.worker.min.js'` (the worker also loads as a script tag, so pdf.js uses a fake worker).
 | File | Role |
 |---|---|
@@ -205,7 +205,7 @@ Marble. index.html, styles.css, README.txt, CREDITS.md, LICENSE stay in the root
 - Source contradictions (decided): the D&D Beyond spell headers wrongly add classes to 9 spells (e.g. Tiny Hut "Cleric",
   Mind Spike "Evocation cantrip"); the class tables back our tags, so spells.js classes stay. The Wizard class table omits
   spells whose own description says Wizard (Chromatic Orb...); we keep Wizard on them.
-- Attribution: Wizards asks for the exact SRD statement and no other credit to them; keep it in CREDITS.md / README.txt
+- Attribution: Wizards asks for the exact SRD statement and no other credit to them; keep it in CREDITS.md / README.md
   only (file headers say "see CREDITS.md"). New third-party files or data go into CREDITS.md.
 - What each data file holds: weapons.js DND.weapons (38), weaponProperties, masteryProperties, ammunition, attackItems, coins;
   armor.js DND.armor (12), shield, armorRules; classes.js DND.classes.{barbarian..wizard} (hit die, saves, proficiencies,
