@@ -43,7 +43,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). Our own scrollbars (user, 2026-10-29: the default looked out of place): global `::-webkit-scrollbar` rules (dark red thumb, gold edge, wider on hover, gold while dragged; a brown one inside `.page`), Firefox gets `scrollbar-color` via `@supports not selector(::-webkit-scrollbar)`. Never set `scrollbar-width`/`scrollbar-color` elsewhere (only `none`): in Chromium 121+ either one switches the custom ones off for that box. Pseudo-element rules can't be nested (`&` can't stand for one). Search boxes' × is restyled too. |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (601 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (603 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -368,12 +368,15 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   redraws only `.mk-body`. Tables and ages are from Claude's knowledge of the 2014-era books; the table rows were checked
   against a public list of D&D Beyond's height/weight rows (2026-10-29); the ages weren't checked (species without a
   confident age have none: "ask your DM").
-- Custom background (user, 2026-10-30: "set the main three stats yourself, starting equip, origin feat, look it up on D&D
-  Beyond"): a "Custom background" card after the 16 (M.bg = CUSTOM), its form below (`customForm`): name + "Look it up on
-  D&D Beyond ↗" (`/search?q=<name>`, checked to work; no name = `/backgrounds`), three ability chips (a 4th click drops the
-  oldest), Origin feat select (origin + dragonmark feats by book, or "Another feat" typed; Magic Initiate list chips), two
-  skills, a tool (tool kinds + `otherTools` or typed), option A items (lines or commas outside brackets) + GP; option B =
-  50 GP. `bg()` returns `customBg()` shaped like DND.backgrounds (`custom: true`), so every step and write() work as
+- Custom background (user, 2026-10-30: "set the main three stats yourself, starting equip, origin feat", and "look it up on
+  D&D Beyond" meant: research how it works there, no button). Rules = 2024 DMG p. 55 "Creating a Background" (read on
+  Roll20's free compendium page): three abilities (+2/+1 or +1 x3 as any background), one Origin feat, two skills (needn't
+  match), one tool, equipment worth 50 GP incl. unspent gold, no Martial weapons or armor. D&D Beyond's builder: its Custom
+  Background is the 2014 kind (no ASI/feat; forum thread 210323, no staff fix). A "Custom background" card after the 16
+  (M.bg = CUSTOM; its ▾ lists those rules), its form below (`customForm`): name, three ability chips (a 4th click drops the
+  oldest), Origin feat select (type 'origin' by book, or "Another feat" typed; Magic Initiate list chips), two skills, a tool
+  (tool kinds + `otherTools` or typed), option A items (lines or commas outside brackets) + gold left over; option B = 50
+  GP. `notForBackground`: Martial weapons / armor / Shield in the items -> a warning (form + Review), not a block. `bg()` returns `customBg()` shaped like DND.backgrounds (`custom: true`), so every step and write() work as
   before. Blocking problem: not exactly three abilities; warnings: no name/feat/tool, < 2 skills. create() passes
   `background` to Level up, whose `bgData()` (L.bg, else C.backgroundData) gives the Origin feat (a feat outside the data
   = "Other feat" with its name), Magic Initiate's list and the skills fallback.
@@ -423,7 +426,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   fields can't be bold; text already there is left alone); weapons/tools/languages -> their official boxes, else Proficiencies; armor -> official armor checkboxes.
   A choice not made writes nothing (listed under "Still to choose"). Sheet text uses no → / ✓ (WinAnsi).
 - Weapon Mastery counts come from `weaponMastery.countByLevel` (Rogue/Paladin/Ranger have no table column for it).
-- Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too; origin slots take dragonmark feats (FotA). The picker has search + a book filter
+- Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too. Origin slots don't take Dragonmark feats (a D&D Beyond moderator: they aren't Origin feats; they come with the dragonmarked house backgrounds). The picker has search + a book filter
   (`L.ui[f.id]`; the list refills without a full render so the search box keeps focus). Prerequisites checked: level,
   ability (`any` = one of), Spellcasting, armor training (`hasArmor`: official armor boxes, else classes' `armorTraining` /
   multiclass armor, armor feats on the sheet, Proficiencies text; no class = yes). Feat sub-picks use ids `f.id + ':sk'
@@ -448,7 +451,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 - maker.test.js: the button, both sheets with pictures, an Elf Cleric on the classic sheet (array swap, equipment/AC,
   details, every box written, Level 1 with skills, Divine Order, Magic Initiate (Wizard), lineage ability, spells) and a
   Human Monk 3 on the official sheet (PHB background + tool, size, point buy, 4d6 rolls, Monk tool -> 'mc:tools',
-  Versatile feat, the Level 2 / Level 3 chain) and a Dwarf Fighter with a custom background (the D&D Beyond link, three abilities, a typed Origin feat reaching Level 1 as \ The Elf's Details: height/age/weight placeholders, weight chips by typed height.
+  Versatile feat, the Level 2 / Level 3 chain) and a Dwarf Fighter with a custom background (no link out, three abilities, no Dragonmarks among Origin feats, the Martial weapon / armor warning, a typed Origin feat reaching Level 1 as \ The Elf's Details: height/age/weight placeholders, weight chips by typed height.
 - beyond.test.js: out-of-reach feats/features/tags/species traits, the question (tick boxes, Keep, Ignore, Escape), the
   marks, the roll-log line, Undo/Redo, asking only after you leave the box, the PDF, Fighting Style (Paladin 1 vs 2), no
   class = no check, windows opening at the top. A test that loads a sheet with out-of-reach things must answer the question

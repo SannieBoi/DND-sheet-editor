@@ -189,22 +189,25 @@ const feat = name => [...LU().querySelectorAll('.lu-feat')].find(s => s.querySel
   const cf = () => MK().querySelector('.mk-custom'), typeAt = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
   const chipIn = (root, t) => [...root.querySelectorAll('.chip')].find(c => c.textContent === t);
   const pickIn = title => [...cf().querySelectorAll('.lu-pick')].find(p => p.querySelector('.lu-pickhead b').textContent === title);
-  ok(cf() && cf().querySelector('a.mk-link')?.href === 'https://www.dndbeyond.com/backgrounds', 'the custom form, with a D&D Beyond link (the backgrounds list while it has no name)');
+  ok(cf() && !cf().querySelector('a'), 'the custom form opens under the card (no link out)');
   cf().querySelector('[data-keep="bgName"]').focus(); typeAt(cf().querySelector('[data-keep="bgName"]'), 'Haunted One');
-  ok(cf().querySelector('a.mk-link').href === 'https://www.dndbeyond.com/search?q=Haunted%20One' && document.activeElement === cf().querySelector('[data-keep="bgName"]'),
-    'a name: the link searches D&D Beyond for it; typing keeps the focus');
+  ok(document.activeElement === cf().querySelector('[data-keep="bgName"]'), 'typing its name keeps the focus');
   ok(/Haunted One/.test(MK().querySelector('.lu-sub').textContent), 'the window title names it');
   for (const ab of ['STR', 'DEX', 'CON', 'WIS']) chipIn(pickIn('Ability scores it raises'), ab).click();
   ok([...pickIn('Ability scores it raises').querySelectorAll('.chip.on')].map(c => c.textContent).join() === 'DEX,CON,WIS' && /3 \/ 3/.test(pickIn('Ability scores it raises').textContent),
     'three ability scores: a fourth click drops the first one (STR)');
   choose(pickIn('Origin feat').querySelector('select'), 'Another feat');
-  ok([...pickIn('Origin feat').querySelectorAll('optgroup')].some(g => g.label === "Player's Handbook (2024)") && [...pickIn('Origin feat').querySelectorAll('option')].some(o => o.value === 'Mark of Shadow'),
-    'Origin feats by book, Dragonmarks too');
+  ok([...pickIn('Origin feat').querySelectorAll('optgroup')].some(g => g.label === "Player's Handbook (2024)") && [...pickIn('Origin feat').querySelectorAll('option')].some(o => o.value === 'Lucky')
+    && ![...pickIn('Origin feat').querySelectorAll('option')].some(o => o.value === 'Mark of Shadow'), 'Origin feats by book (not Dragonmarks: they are not Origin feats)');
   typeAt(pickIn('Origin feat').querySelector('[data-keep="bgFeat"]'), 'Haunted Insight');
   for (const sk of ['Arcana', 'Investigation', 'Survival']) chipIn(pickIn('Skill proficiencies'), sk).click();
   choose(pickIn('Tool proficiency').querySelector('select'), 'Herbalism Kit');
-  typeAt(pickIn('Starting equipment (option A)').querySelector('textarea'), 'Crowbar, Pouch (a key, a charm)\nHolly sprig');
-  typeAt(pickIn('Starting equipment (option A)').querySelector('input'), '3');
+  const eqPick = () => pickIn('Starting equipment: 50 GP worth (option A)'), setItems = v => { typeAt(eqPick().querySelector('textarea'), v); eqPick().querySelector('textarea').dispatchEvent(new Event('change', { bubbles: true })); };
+  setItems('Longsword, Leather Armor, Dagger');
+  ok(/Longsword, Leather Armor: the rules leave Martial weapons and armor out/.test(eqPick().querySelector('.lu-warn')?.textContent || ''), 'a Martial weapon and armor in the items: a warning (a Dagger is fine)');
+  setItems('Crowbar, Pouch (a key, a charm)\nHolly sprig');
+  ok(!eqPick().querySelector('.lu-warn'), 'without them: no warning');
+  typeAt(eqPick().querySelector('input'), '3');
   step('Species'); cardIn(MK(), 'Dwarf').click();
   step('Abilities');
   ok(/Haunted One: DEX, CON, WIS/.test(MK().textContent) && MK().querySelectorAll('.mk-bonus .chip').length === 6, "Abilities: the background's three scores for +2 / +1");

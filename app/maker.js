@@ -107,12 +107,18 @@ function defaultBonus() {
 }
 
 // ---- A custom background --------------------------------------------------------------------------------
-// One from another book or from the DM: the player sets what it gives (three ability scores, an Origin feat, two skills, a
-// tool, equipment option A; B is 50 GP as for every 2024 background). bg() returns it in the shape of DND.backgrounds,
-// so the other steps and write() treat it like any other; Level up gets it as start({ background }).
+// The 2024 Dungeon Master's Guide's "Creating a Background" (p. 55): three abilities, one Origin feat, two skills, one tool,
+// equipment worth 50 GP (unspent gold counts) without Martial weapons or armor. Option A = the typed items and gold left
+// over; B = 50 GP (the same budget, all gold). bg() returns it in the shape of DND.backgrounds, so the other steps and
+// write() treat it like any other; Level up gets it as start({ background }).
 const CUSTOM = 'Custom background', OTHER_FEAT = 'Another feat', OTHER_TOOL = 'Another tool';
-const originFeats = () => D.feats.filter(f => f.type === 'origin' || f.type === 'dragonmark');
-const lookUp = name => name ? 'https://www.dndbeyond.com/search?q=' + encodeURIComponent(name) : 'https://www.dndbeyond.com/backgrounds';
+const originFeats = () => D.feats.filter(f => f.type === 'origin'); // not Dragonmarks: D&D Beyond says they aren't Origin feats
+// What the DMG leaves out of a custom background's equipment (class gear): Martial weapons, armor, a Shield
+function notForBackground(b) {
+  const items = packageItems(b.equipment[0], 'b');
+  return [...weaponsIn(items).filter(w => w.category === 'martial').map(w => w.name), ...D.armor.filter(a => items.some(it => has(it.text, a.name))).map(a => a.name),
+    ...shieldIn(items) ? ['Shield'] : []];
+}
 function customBg() {
   const c = M.custom, tool = c.tool === OTHER_TOOL ? text(c.toolOther) : c.tool;
   return { name: text(c.name) || CUSTOM, custom: true, abilityScores: ABS.filter(ab => c.abs.includes(ab)),
@@ -219,9 +225,12 @@ function backgroundStep() {
       return about('bg:' + x.name, x.name, backgroundInfo(x), card(M.bg === x.name, set(() => { if (M.bg !== x.name) { M.bg = x.name; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), x.name,
         `${x.abilityScores.join(', ')} · ${x.feat}${x.featList ? ` (${cap(x.featList)})` : ''} · ${skills}${tool ? ' · ' + tool : ''}`,
         x.source ? 'PHB' : null));
-    }), about('bg:' + CUSTOM, CUSTOM, ['For a background from another book or your DM. Every 2024 background gives the same kinds of things: ' +
-      'three ability scores to raise, an Origin feat, two skill proficiencies, one tool and starting equipment (or 50 GP instead). ' +
-      'Look it up (the button below searches D&D Beyond for its name) and set them here.'],
+    }), about('bg:' + CUSTOM, CUSTOM, ['For a background from another book, or one you make with your DM (the 2024 Dungeon Master\'s Guide, "Creating a Background"):',
+      fact('Abilities:', 'three that fit it; they rise by +2 and +1, or +1 each, as for any background.'),
+      fact('Feat:', 'one Origin feat.'), fact('Skills:', "two that fit it; they needn't match the abilities."),
+      fact('Tool:', 'one used in its line of work.'),
+      fact('Equipment:', "worth 50 GP, unspent gold included. No Martial weapons or armor: those come from your class."),
+      fact("D&D Beyond's builder:", "its Custom Background still follows the 2014 rules (no ability scores or feat), so make it here.")],
       card(M.bg === CUSTOM, set(() => { if (M.bg !== CUSTOM) { M.bg = CUSTOM; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), CUSTOM,
         'Another book\'s or your DM\'s: set its ability scores, Origin feat, skills, tool and equipment yourself.'))),
     M.bg === CUSTOM ? customForm() : null,
@@ -234,11 +243,10 @@ function customForm() {
   const c = M.custom, feat = D.feats.find(f => f.name === c.feat), feats = originFeats(), book = f => f.source || 'Free rules';
   const count = (n, of) => h('span', { class: 'lu-count' + (n >= of ? ' full' : '') }, `${n} / ${of}`);
   const pickUpTo = (arr, x, n) => arr.includes(x) ? arr.filter(y => y !== x) : [...arr, x].slice(-n); // a click past n drops the oldest
+  const banned = notForBackground(customBg());
   return h('div', { class: 'lu-after mk-custom' },
-    h('div', { class: 'mk-name' }, h('label', { class: 'mk-field' }, 'Background name',
+    h('label', { class: 'mk-field' }, 'Background name',
       h('input', { type: 'text', value: c.name, placeholder: 'e.g. Haunted One', 'data-keep': 'bgName', oninput: e => { c.name = e.target.value; render(); } })),
-      h('a', { class: 'btn mk-link', href: lookUp(text(c.name)), target: '_blank', rel: 'noopener',
-        title: text(c.name) ? `Search D&D Beyond for "${text(c.name)}"` : "D&D Beyond's list of backgrounds" }, 'Look it up on D&D Beyond ↗')),
     h('div', { class: 'lu-pick' }, pickHead('Ability scores it raises', count(c.abs.length, 3)),
       h('div', { class: 'chips' }, ABS.map(ab => chip(ab, c.abs.includes(ab), set(() => { c.abs = pickUpTo(c.abs, ab, 3); defaultBonus(); }), D.rules.abilities[ab]))),
       h('p', { class: 'lu-note' }, 'You choose +2 and +1 (or +1 to all three) in Abilities.')),
@@ -263,11 +271,12 @@ function customForm() {
         h('optgroup', { label: 'Not in the list' }, h('option', { value: OTHER_TOOL, selected: c.tool === OTHER_TOOL }, 'Another tool (type it)'))),
       c.tool === OTHER_TOOL ? h('input', { type: 'text', class: 'lu-wide mk-gap', value: c.toolOther, placeholder: 'Tool', 'data-keep': 'bgTool',
         oninput: e => { c.toolOther = e.target.value; } }) : null),
-    h('div', { class: 'lu-pick' }, pickHead('Starting equipment (option A)'),
+    h('div', { class: 'lu-pick' }, pickHead('Starting equipment: 50 GP worth (option A)'),
       h('textarea', { class: 'lu-wide', rows: 3, placeholder: 'One item per line, or split by commas: e.g. Quarterstaff, Traveler\'s Clothes, Book', 'data-keep': 'bgItems',
-        oninput: e => { c.items = e.target.value; } }, c.items),
-      h('label', { class: 'mk-field mk-gp' }, 'and gold (GP)', h('input', { type: 'number', min: 0, value: c.gp, 'data-keep': 'bgGp', oninput: e => { c.gp = e.target.value; } })),
-      h('p', { class: 'lu-note' }, 'Option B is 50 GP instead. You pick A or B in Equipment.')));
+        oninput: e => { c.items = e.target.value; }, onchange: render }, c.items), // the check below follows when you leave the box
+      h('label', { class: 'mk-field mk-gp' }, 'Gold left over (GP)', h('input', { type: 'number', min: 0, value: c.gp, 'data-keep': 'bgGp', oninput: e => { c.gp = e.target.value; } })),
+      banned.length ? h('p', { class: 'lu-warn' }, `${banned.join(', ')}: the rules leave Martial weapons and armor out of a background's equipment (your class gives them). Keep it if your DM allows.`) : null,
+      h('p', { class: 'lu-note' }, 'The items and the gold left over together are worth 50 GP. Option B is 50 GP in gold instead; you pick A or B in Equipment.')));
 }
 
 // The free rules' species and the Aasimar as cards; a search at the top finds every species (most with their rules,
@@ -482,7 +491,8 @@ const warnings = () => {
   const b = bg(), c = M.custom, mine = b?.custom ? [!text(c.name) ? 'The custom background has no name yet (Background).' : null,
     !b.feat ? 'No Origin feat for the custom background (Background).' : null,
     c.skills.length < 2 ? 'Fewer than two skills for the custom background (Background).' : null,
-    !b.proficiencies.some(p => p.startsWith('Tool: ')) ? 'No tool for the custom background (Background).' : null] : [];
+    !b.proficiencies.some(p => p.startsWith('Tool: ')) ? 'No tool for the custom background (Background).' : null,
+    M.eq.bg === 0 && notForBackground(b).length ? `Martial weapons or armor in the custom background's equipment: ${notForBackground(b).join(', ')} (Background).` : null] : [];
   return [!text(M.d.name) ? 'No character name yet (Details).' : null, ...mine,
     M.d.langs.filter(Boolean).length < CR.languages.count ? 'Fewer than two languages besides Common (Details).' : null].filter(Boolean);
 };

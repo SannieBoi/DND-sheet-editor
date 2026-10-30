@@ -205,7 +205,7 @@ function numbers() {
 // The feats a feat choice can take: Ability Score Improvement and General feats also allow Origin feats (no prerequisite)
 // (Dragonmark feats count as feats you can take at those levels too.)
 const FEAT_CATS = { general: ['general', 'origin', 'dragonmark'], 'epic-boon': ['epic-boon', 'general', 'origin', 'dragonmark'],
-  'fighting-style': ['fighting-style'], origin: ['origin', 'dragonmark'] };
+  'fighting-style': ['fighting-style'], origin: ['origin'] };
 const featOf = f => f.choice?.type === 'feat' && D.feats.find(x => x.name === L.picks[f.id]?.name) || null;
 // Armor training: the official sheet's armor boxes, else your classes (the first class's full training, later classes'
 // multiclass training), armor feats on the sheet and the Proficiencies text. Without a class it can't tell, so it says yes.

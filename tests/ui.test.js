@@ -90,7 +90,8 @@ async function loadSheet(o) {
   ok(aboutOf(MK(), 'Acolyte')?.textContent.startsWith(DND.backgrounds.find(b => b.name === 'Acolyte').summary) && /Magic Initiate \(Cleric\): Learn/.test(aboutOf(MK(), 'Acolyte').textContent),
     "Acolyte's ▾: what the background is about and what its feat does");
   moreOf(MK(), 'Custom background').click(); await wait(5);
-  ok(/three ability scores to raise, an Origin feat, two skill proficiencies, one tool/.test(aboutOf(MK(), 'Custom background')?.textContent || ''), "the custom background's ▾ says what to set");
+  ok(/Creating a Background.*Feat: one Origin feat\..*Equipment: worth 50 GP, unspent gold included\. No Martial weapons or armor/.test(aboutOf(MK(), 'Custom background')?.textContent || ''),
+    "the custom background's ▾: the Dungeon Master's Guide's rules for one");
   mkStep('Equipment');
   moreOf(MK(), 'Option A').click(); await wait(5);
   ok(/Priest's Pack: Backpack, Blanket, Holy Water/.test(aboutOf(MK(), 'Option A')?.textContent || ''), "an equipment option's ▾ lists what is in its pack");
