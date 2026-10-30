@@ -242,6 +242,20 @@ const spellLines = () => [...document.querySelectorAll('[data-field^="Spells "]'
   ok(/Blood Maledict \(Blood Hunter 1\): You know 1 blood curse/.test(val('Features and Traits')) && /\nBlood Curse of Binding: Bonus Action/.test(val('Features and Traits')),
     'Blood Maledict and the curse are written');
   ok(!C.beyond.length && !errors.length, 'nothing beyond the rules, no errors: ' + errors.join(' | '));
+
+  // ---- 10. Divine Soul (Xanathar's, 2014): Cleric spells, the affinity spell, Favored by the Gods
+  await loadSheet((add, box) => basics(add, box, { cls: 'Sorcerer 2', scores: { CHA: 16 }, spells: true }));
+  await openLevelUp(); step('Features'); card('Divine Soul').click(); await wait(10);
+  card('Law').click(); await wait(10);
+  step('Spells');
+  ok(/Divine Soul: also Cleric spells/.test(body().textContent) && /Bless/.test(body().querySelector('.lu-pick')?.parentElement.textContent || ''), 'Divine Soul: Cleric list offered, Bless always prepared');
+  pickSpell('prepared', 'Guiding Bolt');
+  await apply();
+  ok(['Bless', 'Guiding Bolt'].every(n => spellLines().includes(n)) && /Divine Magic \(Divine Soul\): Law - Bless/.test(val('Features and Traits')),
+    'Bless and a Cleric spell on the lines, the affinity written: ' + spellLines().join(', ') + ' | ' + val('Features and Traits').split('\n').find(l => l.startsWith('Divine Magic')));
+  const fav = window.resources.list().find(r => r.name === 'Favored by the Gods');
+  ok(fav && fav.max === 1 && fav.back === 'short' && !window.resources.list().some(r => r.name === 'Unearthly Recovery'), 'Rest tab: Favored by the Gods (short), no Unearthly Recovery before 18');
+  ok(!C.beyond.length && !errors.length, 'Divine Soul: nothing beyond the rules, no errors: ' + errors.join(' | '));
 } catch (err) { log('ERROR', err.stack); }
 document.title = 'DONE';
 })();

@@ -617,7 +617,9 @@ function spellPlan() {
   if (now) {
     plan.cantrips = now.cantrips - (before?.cantrips ?? 0);
     plan.prepared = now.prepared - (before?.prepared ?? 0);
-    if (L.key === 'bard' && lvl >= 10) plan.lists.push('Cleric', 'Druid', 'Wizard'); // Magical Secrets
+    if (L.key === 'bard' && lvl >= 10) { plan.lists.push('Cleric', 'Druid', 'Wizard'); plan.listsWhy = 'Magical Secrets'; }
+    const sd = subclass().data, more = sd?.spellLists?.filter(l => !plan.lists.includes(l)) || []; // Divine Soul: Cleric spells
+    if (more.length) { plan.lists.push(...more); plan.listsWhy = [plan.listsWhy, sd.name].filter(Boolean).join(', '); }
     if (L.key === 'wizard') plan.book = (tableRow(lvl).spellbook || 0) - (L.isNew ? 0 : tableRow(lvl - 1).spellbook || 0);
   }
   // spells that come prepared go on a spell line unless one holds them already (feature text names spells it doesn't give
@@ -1181,7 +1183,7 @@ function spellsStep() {
   if (plan.caster) {
     const whose = tbl.list === c.name ? c.name : `${tbl.list} (${subclass().name})`;
     out.push(h('p', { class: 'lu-lead' }, `${whose} spells at ${c.name} level ${classLevel()}: ${tbl.cantrips} cantrips, ${tbl.prepared} prepared spells, up to level ${max}` +
-      (lists.length > 1 ? ` (Magical Secrets: also ${lists.slice(1).join(', ')} spells).` : '.')));
+      (lists.length > 1 ? ` (${plan.listsWhy}: also ${lists.slice(1).join(', ')} spells).` : '.')));
   }
   if (plan.cantrips > 0) out.push(spellPick('cantrips', { count: plan.cantrips, levels: [0], lists, title: `New ${plural(plan.cantrips, 'cantrip')}` }));
   if (plan.book > 0) out.push(spellPick('book', { count: plan.book, levels: range(1, max), lists: ['Wizard'], title: `Add ${plural(plan.book, 'spell')} to your spellbook` }));

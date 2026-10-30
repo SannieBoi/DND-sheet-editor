@@ -8,7 +8,8 @@
      (that subclass's spells, by the option picked for the feature: Vestige Spells), savant (a Wizard school: one free
      spellbook spell of it at each new spell slot level), spellcasting (third casters such as the Eldritch Knight:
      { type: 'third', ability, list, cantrips { classLevel: known }, prepared [20], slots [20][9] by class level }),
-     lists { id: { title, items [{ name, text }], known { classLevel: number known } } } for choice type 'list'.
+     lists { id: { title, items [{ name, text }], known { classLevel: number known } } } for choice type 'list',
+     spellLists [class names] (more lists the class's new spells may come from: the Divine Soul's Cleric spells).
    Feature extras: choice types 'list' { list }, 'tools' { count, kind }, 'languages' { count }, 'skills' with from: [names]
    and expertise: true; more: [choices] (more picks on the same feature, e.g. a cantrip and a skill; title names each);
    grants.skills / .tools; an option's grants.alwaysPrepared.
@@ -18,7 +19,7 @@ window.DND = window.DND || {};
 
 (() => {
 const PHB = "Player's Handbook (2024)", HOF = 'Forgotten Realms: Heroes of Faerûn', RAV = 'Ravenloft: The Horrors Within',
-  ARC = 'Arcana Unleashed', DROP = 'D&D Beyond Drops (October 2026)';
+  ARC = 'Arcana Unleashed', DROP = 'D&D Beyond Drops (October 2026)', XGE = "Xanathar's Guide to Everything (2014)";
 // Eldritch Knight, Arcane Trickster and Warrior of the Mystic Arts share one table (class level 3-20)
 const THIRD_PREPARED = [0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13];
 const THIRD_SLOTS = [[], [], [2], [3], [3], [3], [4, 2], [4, 2], [4, 2], [4, 3], [4, 3], [4, 3], [4, 3, 2], [4, 3, 2], [4, 3, 2], [4, 3, 3], [4, 3, 3], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 1]]
@@ -399,7 +400,20 @@ sorcerer: [
     f(3, 'Spellfire Spells', 'Always prepared at Sorcerer level 3: Cure Wounds, Guiding Bolt, Lesser Restoration, Scorching Ray; 5: Aura of Vitality, Dispel Magic; 7: Fire Shield, Wall of Fire; 9: Greater Restoration, Flame Strike.'),
     f(6, 'Absorb Spells', 'Counterspell always prepared; when a target fails its save against your Counterspell, regain 1d4 Sorcery Points.'),
     f(14, 'Honed Spellfire', 'Bolstering Flames adds your Sorcerer level to the Temporary HP; Radiant Fire deals 1d8.'),
-    f(18, 'Crown of Spellfire', 'When you use Innate Sorcery, while it lasts: once per turn when hit, spend up to CHA modifier (min 1) Hit Point Dice and reduce the damage by their roll; Fly Speed 60 ft (hover); a save for half damage against a spell or magic deals none on a success and half on a failure. Once per Long Rest, or spend 5 Sorcery Points.')] }
+    f(18, 'Crown of Spellfire', 'When you use Innate Sorcery, while it lasts: once per turn when hit, spend up to CHA modifier (min 1) Hit Point Dice and reduce the damage by their roll; Fly Speed 60 ft (hover); a save for half damage against a spell or magic deals none on a success and half on a failure. Once per Long Rest, or spend 5 Sorcery Points.')] },
+  // 2014 book: its level 1 features come at the 2024 Sorcerer's subclass level (3), as the 2024 PHB says for older subclasses
+  { name: 'Divine Soul', source: XGE, summary: 'A soul touched by a god: Cleric spells too, an affinity spell, 2d4 to turn a miss or failed save, healing rerolls, wings.',
+    spellLists: ['Cleric'], features: [
+    f(3, 'Divine Magic', 'When you gain or replace a Sorcerer cantrip or prepared spell, you can pick it from the Cleric list as well as the Sorcerer list (it is a Sorcerer spell for you). Pick an affinity for the source of your power: its spell is always prepared and does not count against your Sorcerer spells.', { choice: pick([
+      opt('Good', 'Cure Wounds always prepared.', { alwaysPrepared: ['Cure Wounds'] }),
+      opt('Evil', 'Inflict Wounds always prepared.', { alwaysPrepared: ['Inflict Wounds'] }),
+      opt('Law', 'Bless always prepared.', { alwaysPrepared: ['Bless'] }),
+      opt('Chaos', 'Bane always prepared.', { alwaysPrepared: ['Bane'] }),
+      opt('Neutrality', 'Protection from Evil and Good always prepared.', { alwaysPrepared: ['Protection from Evil and Good'] })]) }),
+    f(3, 'Favored by the Gods', 'When you fail a saving throw or miss with an attack roll, roll 2d4 and add it to the total, which may change the outcome. Once per Short or Long Rest.'),
+    f(6, 'Empowered Healing', 'When you or an ally within 5 ft rolls dice for the HP a spell restores, spend 1 Sorcery Point to reroll any number of those dice once (not while Incapacitated). Once per turn.'),
+    f(14, 'Otherworldly Wings', 'Bonus Action: spectral wings give you a Fly Speed of 30 ft until you dismiss them (Bonus Action). Eagle wings for Good or Law, bat wings for Evil or Chaos, dragonfly wings for Neutrality.'),
+    f(18, 'Unearthly Recovery', 'Bonus Action while you have less than half your HP maximum: regain HP equal to half your HP maximum. Once per Long Rest.')] }
 ],
 warlock: [
   { name: 'Archfey Patron', source: PHB, summary: 'Free Misty Steps with extra effects (Temporary HP, taunts, invisibility, Psychic damage), charm immunity.',

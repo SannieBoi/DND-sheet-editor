@@ -20,7 +20,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 |---|---|
 | lib/pdf.min.js, lib/pdf.worker.min.js (pdf.js 3.11.174), lib/pdf-lib.min.js | render PDF / write PDF. Never edit. |
 | data/ rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
-| data/subclasses.js | loads right after classes.js: sets `DND.classes.<key>.subclasses = [free-rules subclass, ...]` for the 12 classes: the other 36 PHB subclasses + Heroes of Faerûn (8), Ravenloft: The Horrors Within (6), Arcana Unleashed (8), D&D Beyond Drops Oct 2026 (Sorrow Knight) = 59 more, 71 in all. Facts from dnd2024.wikidot.com (2026-10-28), summaries in our own words. Schema extras in its header (summary, short, spells, spellsFrom, savant, spellcasting 'third', lists, riders, `more` choices). Also gives the free-rules subclasses a `summary`. |
+| data/subclasses.js | loads right after classes.js: sets `DND.classes.<key>.subclasses = [free-rules subclass, ...]` for the 12 classes: the other 36 PHB subclasses + Heroes of Faerûn (8), Ravenloft: The Horrors Within (6), Arcana Unleashed (8), D&D Beyond Drops Oct 2026 (Sorrow Knight), Xanathar's Guide (Divine Soul, 2014) = 60 more, 72 in all. Facts from dnd2024.wikidot.com (2026-10-28), summaries in our own words. Schema extras in its header (summary, short, spells, spellsFrom, spellLists, savant, spellcasting 'third', lists, riders, `more` choices). Also gives the free-rules subclasses a `summary`. |
 | data/artificer.js, data/blood-hunter.js | load after spells.js. `DND.classes.artificer` (Forge of the Artificer: levels with plansKnown/magicItems, lists.plans, 5 FotA subclasses + Reanimator; tags 'Artificer' onto the SRD spells of its list; pushes a Summon Construct name-only stub into spellListOnly). `DND.classes.bloodhunter` (Matthew Mercer's 2020 class from D&D Beyond, written for 2014 rules: hemocraftDie/bloodCurses/bloodMaledict/crimsonRites columns, lists.bloodCurses/.rites, multiclass.requiresOneOf, 4 orders; Profane Soul = `spellcasting.type 'pact'`). Both set `subclass` = their first subclass too. |
 | data/feats-more.js | pushes onto `DND.feats` (loads right after feats.js): the rest of the 2024 PHB (58 feats) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public list; "see the book") for the feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light. 140 feats. Fields in its header (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
 | data/species-more.js | pushes onto `DND.species` (loads right after species.js) EVERY species on D&D Beyond's species list (user asked for all, no duplicates): 172 in all. With their rules (summaries in our own words): the PHB Aasimar and 62 official species from wikidot (2026-10-28: dnd2024.wikidot.com for Forge of the Artificer, Lorwyn, Ravenloft: The Horrors Within, Drops; dnd5e.wikidot.com for MotM, Spelljammer, Ravnica, Theros, Strixhaven, Dragonlance, AI, SCAG, Locathah, Grung, Basic Rules 2014). `brief` (trait names only): Kithkin (no wikidot page) and the 99 third-party species. Dedupe rule in the comment above `listed`. Its header documents the extra fields (`spells`, `uses`, choice type `ability`, parts `if`, `ac`, `acBonus`, `unarmed`, `riders`, `critExtraMelee`). |
@@ -117,7 +117,10 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 ## Subclasses (script.js subclassOf, levelup.js) — decisions
 - User (2026-10-28): every class's subclasses beyond the free rules, facts from wikidot ("sufficient"); the Artificer;
   and the Blood Hunter from the D&D Beyond link (friends asked). Official books only (PHB, HoF, Ravenloft, Arcana
-  Unleashed, Drops); no UA. Blood Hunter = Mercer's 2020 version as on that page (2014 rules) kept as written: its four
+  Unleashed, Drops); no UA. Exception (user asked, 2026-10-30): the Divine Soul sorcerer (Xanathar's, 2014): its level 1
+  features come at Sorcerer 3 (the 2024 PHB's rule for older subclasses); 2014 "spells known" read as prepared spells;
+  Divine Magic = `spellLists: ['Cleric']` (levelup.js spellPlan adds them to the lists, lead line names why) + the affinity
+  as an option with alwaysPrepared; Favored by the Gods (short) and Unearthly Recovery (18, long) are Rest tab rows. Blood Hunter = Mercer's 2020 version as on that page (2014 rules) kept as written: its four
   Fighting Styles map to the 2024 feats of those names (`choice.only`), ASI at 19 is a general feat pick, no Weapon
   Mastery, Hemocraft modifier taken as INT (WIS only with the DM's OK, not modelled), its 2014 equipment as two packages
   with no gold (maker shows no "0 GP").
@@ -230,7 +233,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   writes; sweep.test checks none of it is flagged). Species match by name or `aliases`; the longest match wins.
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. The PHB adds feats, the Aasimar and 12 backgrounds.
   species-more.js adds 62 official species with their rules (wikidot) and 100 names-only ones.
-  subclasses.js adds every other official 2024 subclass (71 for the 12 classes; 81 with the Artificer's 6 and the Blood Hunter's 4).
+  subclasses.js adds every other official 2024 subclass and the Divine Soul (72 for the 12 classes; 82 with the Artificer's 6 and the Blood Hunter's 4).
 
 ## Rules decisions (keep consistent)
 - 2024 rules. Adv + Dis cancel. Crits double dice only. Nat 1 attack = miss, no damage. Checks/saves never crit.
@@ -463,7 +466,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   math, "Blood Hunter 3 (Ghostslayer)" next to a Hunter Ranger, Blood Hunter 2 (four styles, rites greyed below 14, the
   rite in the roller, Blood Maledict resource), Profane Soul spells and pact slot, Vestige Spells picked and read back,
   Artificer level 1 and plans, Knowledge Domain Expertise, a Wizard savant pick, Psi Warrior rider and dice, a Blood
-  Hunter level 1. subsweep.test.js: every non-free subclass (67) picked at its level, then levelled through every level
+  Hunter level 1. Divine Soul (Cleric list, Law -> Bless, Favored by the Gods). subsweep.test.js: every non-free subclass (68) picked at its level, then levelled through every level
   where it gains something (all levels for casters/savants), every pick filled; no errors, reads back, nothing beyond
   the rules (~40 s).
 - species.test.js: species data counts, spell names in trait/feature text (Darkvision, later levels, longer names), the maker's species step (cards, search by name/book, names-only warning, Tortle /
