@@ -89,6 +89,12 @@ async function loadSheet(o) {
   moreOf(MK(), 'Acolyte').click(); await wait(5);
   ok(aboutOf(MK(), 'Acolyte')?.textContent.startsWith(DND.backgrounds.find(b => b.name === 'Acolyte').summary) && /Magic Initiate \(Cleric\): Learn/.test(aboutOf(MK(), 'Acolyte').textContent),
     "Acolyte's ▾: what the background is about and what its feat does");
+  moreOf(MK(), 'Custom background').click(); await wait(5);
+  ok(/three ability scores to raise, an Origin feat, two skill proficiencies, one tool/.test(aboutOf(MK(), 'Custom background')?.textContent || ''), "the custom background's ▾ says what to set");
+  mkStep('Equipment');
+  moreOf(MK(), 'Option A').click(); await wait(5);
+  ok(/Priest's Pack: Backpack, Blanket, Holy Water/.test(aboutOf(MK(), 'Option A')?.textContent || ''), "an equipment option's ▾ lists what is in its pack");
+  ok(!cardIn(MK(), 'Option B').parentElement.classList.contains('lu-cardwrap'), 'an option without a pack has no ▾');
 
   // ---- 4. the species step: the search at the top, results right under it; species info with their traits
   mkStep('Species');
@@ -138,6 +144,11 @@ async function loadSheet(o) {
   typeIn(s(), 'alert'); await settle(b);
   cardIn(sec(), 'Alert').click(); await wait(20);
   ok(Math.abs(b.scrollTop - at) <= 2 && cardIn(sec(), 'Alert').classList.contains('on'), 'choosing what it found redraws without a jump');
+  typeIn(s(), 'tough'); await settle(b);
+  moreOf(sec(), 'Tough').click(); await wait(5);
+  ok(/Book: Player's Handbook \(2024\)\./.test(aboutOf(sec(), 'Tough')?.textContent || '') && cardIn(sec(), 'Tough').classList.contains('open') && !cardIn(sec(), 'Tough').classList.contains('on'),
+    "a feat card's ▾: its whole summary and its book, without choosing it");
+  ok(cardIn(sec(), 'Alert').classList.contains('on') && s().value === 'tough', 'the chosen feat and the search stay');
   W().querySelector('.lu-x').click(); await wait(10);
   btnIn(document.querySelector('.ask'), 'Throw away').click(); await wait(10);
   // the last spell search of a new Wizard: when it finds nothing, little is left under it, so room is added to keep it up
@@ -153,6 +164,14 @@ async function loadSheet(o) {
   typeIn(s2(), 'magic'); await settle(b2);
   const found2 = [...s2().closest('.lu-pick').querySelectorAll('.lu-spell')][0];
   ok(Math.abs(b2.scrollTop - at2) <= 1 && found2 && inView(found2, b2), `typing on: it stays, and the spells it finds show under it (${found2?.querySelector('b').textContent})`);
+  typeIn(s2(), ''); await wait(5);
+  const list = s2().closest('.lu-pick').querySelector('.lu-spells'), spellNamed = n => [...list.querySelectorAll('.lu-spell')].find(x => x.querySelector('b').textContent === n);
+  list.scrollTop = spellNamed('Magic Missile').getBoundingClientRect().top - list.getBoundingClientRect().top - 20; const listAt = list.scrollTop;
+  spellNamed('Magic Missile').parentElement.querySelector('.lu-more').click(); await wait(5);
+  const mm = spellNamed('Magic Missile');
+  ok(/Casting: Action · 120 feet/.test(mm.querySelector('.lu-about')?.textContent || '') && /dart/.test(mm.querySelector('.lu-about').textContent) && !mm.classList.contains('on'),
+    "a spell's ▾: casting time, range, components, duration and its text, without picking it");
+  ok(Math.abs(list.scrollTop - listAt) <= 1 && listAt > 0, `the spell list stays where it was (${listAt} px down)`);
   step('Hit Points'); await wait(5);
   ok(!body().querySelector('.lu-room'), 'another step: the room is gone');
   W().querySelector('.lu-x').click(); await wait(10);
@@ -165,6 +184,26 @@ async function loadSheet(o) {
   cardIn(W(), 'A new class (multiclass)').click(); await wait(5);
   const pickedName = W().querySelector('.lu-opts .lu-opt.on b')?.textContent, key = Object.keys(DND.classes).find(k => DND.classes[k].name === pickedName);
   ok(key && W().querySelector('.lu-blurb')?.textContent === DND.classes[key].summary, `multiclassing into ${pickedName}: what the class is about`);
+  const optWrap = n => [...W().querySelectorAll('.lu-opts .lu-cardwrap')].find(w => w.querySelector('.lu-opt b')?.textContent === n);
+  optWrap('Wizard').querySelector('.lu-more').click(); await wait(5);
+  ok(/Multiclassing:/.test(optWrap('Wizard').querySelector('.lu-about')?.textContent || '') && optWrap('Wizard').classList.contains('open') && pickedName === W().querySelector('.lu-opts .lu-opt.on b')?.textContent,
+    "a multiclass option's ▾: the class and its multiclassing rules, without choosing it");
+  ok(optWrap('Wizard').offsetWidth > optWrap('Cleric').offsetWidth * 1.5, 'an open option takes the whole row');
+  moreOf(W(), 'Fighter 3 → 4').click(); await wait(5);
+  ok(/Ability Score Improvement:/.test(aboutOf(W(), 'Fighter 3 → 4')?.textContent || ''), "the class card's ▾: what the next level's features do");
+  W().querySelector('.lu-x').click(); await wait(10);
+  btnIn(document.querySelector('.ask'), 'Throw away')?.click(); await wait(10);
+
+  // invocations: clipped on the button, all of it (and what it needs) under the ▾
+  type('ClassLevel', 'Warlock 1'); await wait(10);
+  document.getElementById('levelUp').click(); await wait(10);
+  btnIn(document.querySelector('.ask'), 'Level up').click(); await wait(20);
+  step('Features'); await wait(5);
+  const invWrap = () => [...body().querySelectorAll('.lu-cardwrap')].find(w => w.querySelector('.lu-opt b')?.textContent === 'Agonizing Blast');
+  ok(invWrap() && /…$/.test(invWrap().querySelector('small.clip')?.textContent || ''), 'a long invocation text is clipped on its button');
+  invWrap().querySelector('.lu-more').click(); await wait(5);
+  ok(getComputedStyle(invWrap().querySelector('small.clip')).display === 'none' && /Needs: Warlock level 2\+/.test(invWrap().querySelector('.lu-about')?.textContent || '')
+    && invWrap().querySelector('.lu-about').textContent.includes(DND.classes.warlock.invocations.find(i => i.name === 'Agonizing Blast').text), 'its ▾: the whole text and what it needs');
   W().querySelector('.lu-x').click(); await wait(10);
   btnIn(document.querySelector('.ask'), 'Throw away')?.click(); await wait(10);
 

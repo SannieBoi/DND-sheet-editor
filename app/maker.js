@@ -62,7 +62,7 @@ async function thumb(key) {
 // ---- The new character ----------------------------------------------------------------------------------
 let M = null, win = null;
 const cls = () => D.classes[M.cls];
-const bg = () => D.backgrounds.find(b => b.name === M.bg);
+const bg = () => M.bg === CUSTOM ? customBg() : D.backgrounds.find(b => b.name === M.bg);
 const species = () => D.species.find(s => s.name === M.species);
 // The class's order of importance (from Standard Array by Class), used to place rolled scores
 const priority = key => ABS.map((ab, i) => [ab, CR.standardArrayByClass[key][i]]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
@@ -72,6 +72,7 @@ function fresh() {
   return { step: 0, sheet: 'classic', cls: null, level: 1, bg: null, bgTool: '', species: null, lineage: '', size: '', spellAbility: '', about: [],
     method: 'array', assign: {}, rolls: null, buy: null, manual: null, bonus: { mode: 2, plus2: null, plus1: null },
     eq: { cls: 0, bg: 0, picks: {} }, extraGold: null,
+    custom: { name: '', abs: [], feat: '', other: '', list: '', skills: [], tool: '', toolOther: '', items: '', gp: '' },
     d: { name: '', player: '', alignment: '', xp: '', langs: ['', ''], age: '', height: '', weight: '', eyes: '', skin: '', hair: '',
       personality: '', ideals: '', bonds: '', flaws: '', backstory: '' } };
 }
@@ -103,6 +104,22 @@ function defaultBonus() {
   const prio = priority(M.cls || 'fighter'), mine = b.abilityScores;
   const by = prio.filter(ab => mine.includes(ab));
   M.bonus = { mode: 2, plus2: by[0], plus1: by[1] };
+}
+
+// ---- A custom background --------------------------------------------------------------------------------
+// One from another book or from the DM: the player sets what it gives (three ability scores, an Origin feat, two skills, a
+// tool, equipment option A; B is 50 GP as for every 2024 background). bg() returns it in the shape of DND.backgrounds,
+// so the other steps and write() treat it like any other; Level up gets it as start({ background }).
+const CUSTOM = 'Custom background', OTHER_FEAT = 'Another feat', OTHER_TOOL = 'Another tool';
+const originFeats = () => D.feats.filter(f => f.type === 'origin' || f.type === 'dragonmark');
+const lookUp = name => name ? 'https://www.dndbeyond.com/search?q=' + encodeURIComponent(name) : 'https://www.dndbeyond.com/backgrounds';
+function customBg() {
+  const c = M.custom, tool = c.tool === OTHER_TOOL ? text(c.toolOther) : c.tool;
+  return { name: text(c.name) || CUSTOM, custom: true, abilityScores: ABS.filter(ab => c.abs.includes(ab)),
+    feat: c.feat === OTHER_FEAT ? text(c.other) : c.feat, featList: c.feat === 'Magic Initiate' ? c.list || 'cleric' : undefined,
+    proficiencies: [...c.skills.map(s => 'Skill: ' + s), ...tool ? ['Tool: ' + tool] : []],
+    // items one per line or split by commas (not those inside brackets: "Pouch (2 GP, a key)")
+    equipment: [{ items: text(c.items).split(/\n|,(?![^(]*\))/).map(text).filter(Boolean), gp: Math.max(0, Math.round(+c.gp || 0)) }, { gp: 50 }] };
 }
 
 // ---- Starting equipment --------------------------------------------------------------------------------
@@ -202,10 +219,55 @@ function backgroundStep() {
       return about('bg:' + x.name, x.name, backgroundInfo(x), card(M.bg === x.name, set(() => { if (M.bg !== x.name) { M.bg = x.name; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), x.name,
         `${x.abilityScores.join(', ')} · ${x.feat}${x.featList ? ` (${cap(x.featList)})` : ''} · ${skills}${tool ? ' · ' + tool : ''}`,
         x.source ? 'PHB' : null));
-    })),
+    }), about('bg:' + CUSTOM, CUSTOM, ['For a background from another book or your DM. Every 2024 background gives the same kinds of things: ' +
+      'three ability scores to raise, an Origin feat, two skill proficiencies, one tool and starting equipment (or 50 GP instead). ' +
+      'Look it up (the button below searches D&D Beyond for its name) and set them here.'],
+      card(M.bg === CUSTOM, set(() => { if (M.bg !== CUSTOM) { M.bg = CUSTOM; M.bgTool = ''; M.eq.bg = 0; defaultBonus(); } }), CUSTOM,
+        'Another book\'s or your DM\'s: set its ability scores, Origin feat, skills, tool and equipment yourself.'))),
+    M.bg === CUSTOM ? customForm() : null,
     tools ? h('div', { class: 'lu-pick' }, pickHead(`Your ${b.toolChoice.from[0]}`),
       h('select', { class: 'lu-wide', onchange: e => { M.bgTool = e.target.value; render(); } },
         h('option', { value: '' }, `Choose one…`), tools.map(t => h('option', { value: t, selected: M.bgTool === t }, t)))) : null];
+}
+// What the custom background gives, set by hand
+function customForm() {
+  const c = M.custom, feat = D.feats.find(f => f.name === c.feat), feats = originFeats(), book = f => f.source || 'Free rules';
+  const count = (n, of) => h('span', { class: 'lu-count' + (n >= of ? ' full' : '') }, `${n} / ${of}`);
+  const pickUpTo = (arr, x, n) => arr.includes(x) ? arr.filter(y => y !== x) : [...arr, x].slice(-n); // a click past n drops the oldest
+  return h('div', { class: 'lu-after mk-custom' },
+    h('div', { class: 'mk-name' }, h('label', { class: 'mk-field' }, 'Background name',
+      h('input', { type: 'text', value: c.name, placeholder: 'e.g. Haunted One', 'data-keep': 'bgName', oninput: e => { c.name = e.target.value; render(); } })),
+      h('a', { class: 'btn mk-link', href: lookUp(text(c.name)), target: '_blank', rel: 'noopener',
+        title: text(c.name) ? `Search D&D Beyond for "${text(c.name)}"` : "D&D Beyond's list of backgrounds" }, 'Look it up on D&D Beyond ↗')),
+    h('div', { class: 'lu-pick' }, pickHead('Ability scores it raises', count(c.abs.length, 3)),
+      h('div', { class: 'chips' }, ABS.map(ab => chip(ab, c.abs.includes(ab), set(() => { c.abs = pickUpTo(c.abs, ab, 3); defaultBonus(); }), D.rules.abilities[ab]))),
+      h('p', { class: 'lu-note' }, 'You choose +2 and +1 (or +1 to all three) in Abilities.')),
+    h('div', { class: 'lu-pick' }, pickHead('Origin feat'),
+      h('select', { class: 'lu-wide', onchange: e => { c.feat = e.target.value; render(); } },
+        h('option', { value: '' }, 'Choose an Origin feat…'),
+        [...new Set(feats.map(book))].map(b => h('optgroup', { label: b }, feats.filter(f => book(f) === b)
+          .map(f => h('option', { value: f.name, selected: c.feat === f.name }, f.name + (f.brief ? ' (names only)' : ''))))),
+        h('optgroup', { label: 'Not in the list' }, h('option', { value: OTHER_FEAT, selected: c.feat === OTHER_FEAT }, 'Another feat (type its name)'))),
+      c.feat === OTHER_FEAT ? h('input', { type: 'text', class: 'lu-wide mk-gap', value: c.other, placeholder: 'Feat name', 'data-keep': 'bgFeat',
+        oninput: e => { c.other = e.target.value; } }) : null,
+      feat?.choice?.type === 'magicInitiate' ? h('div', { class: 'chips mk-gap' }, feat.choice.lists.map(l => chip(cap(l) + ' list', (c.list || 'cleric') === l, set(() => { c.list = l; })))) : null,
+      feat?.summary ? h('p', { class: 'lu-note' }, feat.summary) : null,
+      c.feat === OTHER_FEAT ? h('p', { class: 'lu-note' }, 'Level 1 writes its name; add what it does yourself.') : null),
+    h('div', { class: 'lu-pick' }, pickHead('Skill proficiencies', count(c.skills.length, 2)),
+      h('div', { class: 'chips' }, D.rules.skills.map(s => chip(s.name, c.skills.includes(s.name), set(() => { c.skills = pickUpTo(c.skills, s.name, 2); }), s.ability)))),
+    h('div', { class: 'lu-pick' }, pickHead('Tool proficiency'),
+      h('select', { class: 'lu-wide', onchange: e => { c.tool = e.target.value; render(); } },
+        h('option', { value: '' }, 'Choose a tool…'),
+        Object.entries({ ...CR.toolKinds, 'Other tools': CR.otherTools }).map(([kind, list]) => h('optgroup', { label: kind },
+          list.map(t => h('option', { value: t, selected: c.tool === t }, t)))),
+        h('optgroup', { label: 'Not in the list' }, h('option', { value: OTHER_TOOL, selected: c.tool === OTHER_TOOL }, 'Another tool (type it)'))),
+      c.tool === OTHER_TOOL ? h('input', { type: 'text', class: 'lu-wide mk-gap', value: c.toolOther, placeholder: 'Tool', 'data-keep': 'bgTool',
+        oninput: e => { c.toolOther = e.target.value; } }) : null),
+    h('div', { class: 'lu-pick' }, pickHead('Starting equipment (option A)'),
+      h('textarea', { class: 'lu-wide', rows: 3, placeholder: 'One item per line, or split by commas: e.g. Quarterstaff, Traveler\'s Clothes, Book', 'data-keep': 'bgItems',
+        oninput: e => { c.items = e.target.value; } }, c.items),
+      h('label', { class: 'mk-field mk-gp' }, 'and gold (GP)', h('input', { type: 'number', min: 0, value: c.gp, 'data-keep': 'bgGp', oninput: e => { c.gp = e.target.value; } })),
+      h('p', { class: 'lu-note' }, 'Option B is 50 GP instead. You pick A or B in Equipment.')));
 }
 
 // The free rules' species and the Aasimar as cards; a search at the top finds every species (most with their rules,
@@ -279,7 +341,8 @@ function abilitiesStep() {
       ABS.map(ab => h('tr', { class: prio.includes(ab) ? 'main' : '' }, h('td', {}, h('b', {}, D.rules.abilities[ab]), prio.includes(ab) ? h('small', {}, ` ${D.classes[M.cls].name}`) : null),
         h('td', {}, control(ab)), h('td', { class: 'mk-plus' }, bon[ab] ? `+${bon[ab]}` : ''), h('td', { class: 'mk-total' }, fin[ab] ?? '—'),
         h('td', {}, fin[ab] == null ? '' : fmt(modOf(fin[ab])))))),
-    b ? h('div', { class: 'lu-pick' }, pickHead(`${b.name}: ${b.abilityScores.join(', ')}`),
+    b?.custom && b.abilityScores.length < 3 ? h('p', { class: 'lu-note bad' }, 'Choose the three ability scores your background raises (Background step).')
+    : b ? h('div', { class: 'lu-pick' }, pickHead(`${b.name}: ${b.abilityScores.join(', ')}`),
       h('div', { class: 'chips' }, chip('+2 and +1', M.bonus.mode === 2, set(() => { M.bonus.mode = 2; })), chip('+1 to all three', M.bonus.mode === 1, set(() => { M.bonus.mode = 1; }))),
       M.bonus.mode === 2 ? h('div', { class: 'mk-bonus' },
         [['plus2', '+2'], ['plus1', '+1']].map(([k, label]) => h('div', {}, h('small', {}, label),
@@ -300,8 +363,13 @@ function rollAll() {
 
 function equipmentStep() {
   const c = cls(), b = bg(), fin = finalScores();
-  const option = (opt, i, prefix, on, pickIt) => card(on, set(pickIt), `Option ${'ABC'[i]}`,
-    opt.items ? `${packageItems(opt, prefix).map(x => x.text).join(', ')}${opt.gp ? `, and ${opt.gp} GP` : ''}` : `${opt.gp} GP to buy your own gear`); // the Blood Hunter's packages have no gold
+  // a package's card; its ▾ lists what is in its equipment packs
+  const option = (opt, i, prefix, on, pickIt) => {
+    const items = packageItems(opt, prefix), packs = items.filter(x => CR.packs[x.text]);
+    return about(`eq:${prefix}${i}`, `${prefix === 'c' ? c.name : b.name} option ${'ABC'[i]}`, packs.map(x => fact(`${x.text}:`, CR.packs[x.text].join(', ') + '.')),
+      card(on, set(pickIt), `Option ${'ABC'[i]}`, opt.items // the Blood Hunter's packages have no gold
+        ? `${items.map(x => x.text).join(', ') || 'no items typed yet (Background step)'}${opt.gp ? `, and ${opt.gp} GP` : ''}` : `${opt.gp} GP to buy your own gear`));
+  };
   const choices = (opt, prefix) => packageItems(opt, prefix).filter(x => typeof x.raw === 'object' && x.raw.choose).map(x => h('div', { class: 'lu-pick' },
     pickHead(x.raw.choose.join(' or ') + (x.raw.proficiency ? ' (you will be proficient with it)' : '')),
     h('select', { class: 'lu-wide', onchange: e => { M.eq.picks[x.key] = e.target.value; render(); } },
@@ -401,6 +469,7 @@ function problems() {
   if (!M.bg) out.push('Choose a background.');
   if (!M.species) out.push('Choose a species.');
   if (bg()?.toolChoice && !M.bgTool) out.push(`Choose your ${bg().toolChoice.from[0]} (Background).`);
+  if (bg()?.custom && bg().abilityScores.length !== 3) out.push('Choose the three ability scores your background raises (Background).');
   if (sp?.subspecies?.length && !M.lineage) out.push(`Choose a ${(lineageFeature()?.name || 'lineage').toLowerCase()} (Species).`);
   if (sp && /or/.test(sp.size || '') && !M.size) out.push('Choose a size (Species).');
   if (ABS.some(ab => finalScores()[ab] == null)) out.push('Place all six ability scores (Abilities).');
@@ -409,8 +478,14 @@ function problems() {
   for (const x of chosenItems()) if (typeof x.raw === 'object' && x.raw.choose && !M.eq.picks[x.key]) out.push(`Choose the ${x.raw.choose.join(' or ')} (Equipment).`);
   return out;
 }
-const warnings = () => [!text(M.d.name) ? 'No character name yet (Details).' : null,
-  M.d.langs.filter(Boolean).length < CR.languages.count ? 'Fewer than two languages besides Common (Details).' : null].filter(Boolean);
+const warnings = () => {
+  const b = bg(), c = M.custom, mine = b?.custom ? [!text(c.name) ? 'The custom background has no name yet (Background).' : null,
+    !b.feat ? 'No Origin feat for the custom background (Background).' : null,
+    c.skills.length < 2 ? 'Fewer than two skills for the custom background (Background).' : null,
+    !b.proficiencies.some(p => p.startsWith('Tool: ')) ? 'No tool for the custom background (Background).' : null] : [];
+  return [!text(M.d.name) ? 'No character name yet (Details).' : null, ...mine,
+    M.d.langs.filter(Boolean).length < CR.languages.count ? 'Fewer than two languages besides Common (Details).' : null].filter(Boolean);
+};
 
 function reviewStep() {
   const fin = finalScores(), items = chosenItems(), sp = species(), ac = armorClass(items, fin), b = bg();
@@ -422,7 +497,7 @@ function reviewStep() {
     h('ul', { class: 'mk-review' },
       row('Sheet', SHEETS[M.sheet].name),
       row('Class', M.cls ? `${cls().name}, starting at level ${M.level}` : '—'),
-      row('Background', b ? `${b.name}${M.bgTool ? ` (${M.bgTool})` : ''}: ${b.proficiencies.map(p => p.replace(/^\w+: /, '')).join(', ')}; ${b.feat}` : '—'),
+      row('Background', b ? `${b.name}${M.bgTool ? ` (${M.bgTool})` : ''}: ${b.proficiencies.map(p => p.replace(/^\w+: /, '')).join(', ')}; ${b.feat || 'no Origin feat'}` : '—'),
       row('Species', sp ? `${sp.name}${M.lineage ? ` (${M.lineage})` : ''}${M.size ? `, ${M.size}` : ''}` : '—'),
       row('Abilities', ABS.map(ab => `${ab} ${fin[ab] ?? '—'}`).join(' · ')),
       row('Armor Class', `${ac.ac} (${ac.how})`),
@@ -491,6 +566,7 @@ async function create() {
   const bytes = await blankBytes(M.sheet), name = text(M.d.name).replace(/[\\/:*?"<>|]+/g, '') || 'New character';
   const opts = { key: M.cls, target: M.level, picks: {} }, lf = lineageFeature();
   if (lf) opts.picks['sp:' + lf.name] = { name: M.lineage, ability: lf.choice.ability ? M.spellAbility || defaultSpellAbility(lf) : null };
+  if (bg().custom) opts.background = bg(); // Level up takes its Origin feat from it (the sheet's Background box names no known one)
   const prof = chosenItems().find(x => typeof x.raw === 'object' && x.raw.proficiency);
   if (prof && M.eq.picks[prof.key]) opts.picks['mc:tools'] = [M.eq.picks[prof.key]];
   const state = M;
@@ -518,7 +594,7 @@ function render() {
   if (!M || !win) return;
   const i = M.step, body = win.querySelector('.lu-body'), keep = M.shown === i ? body.scrollTop : 0;
   const a = document.activeElement, keepKey = a && body.contains(a) ? a.dataset.keep : null, pos = keepKey && a.selectionStart;
-  win.querySelector('.lu-sub').textContent = [M.cls && cls().name, M.species, M.bg].filter(Boolean).join(' · ') || 'A new character, step by step';
+  win.querySelector('.lu-sub').textContent = [M.cls && cls().name, M.species, M.bg && bg().name].filter(Boolean).join(' · ') || 'A new character, step by step';
   win.querySelector('.lu-steps').replaceChildren(...STEPS.map((s, n) => h('button', { class: n === i ? 'on' : n < i ? 'done' : '', onclick: () => { M.step = n; render(); } },
     h('i', {}, n + 1), s.name)));
   const room = M.shown === i && body.querySelector(':scope > .lu-room'); // dialog.js: room left under a search box's results

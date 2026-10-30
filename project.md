@@ -25,13 +25,13 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | data/feats-more.js | pushes onto `DND.feats` (loads right after feats.js): the rest of the 2024 PHB (58 feats) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public list; "see the book") for the feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light. 140 feats. Fields in its header (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
 | data/species-more.js | pushes onto `DND.species` (loads right after species.js) EVERY species on D&D Beyond's species list (user asked for all, no duplicates): 172 in all. With their rules (summaries in our own words): the PHB Aasimar and 62 official species from wikidot (2026-10-28: dnd2024.wikidot.com for Forge of the Artificer, Lorwyn, Ravenloft: The Horrors Within, Drops; dnd5e.wikidot.com for MotM, Spelljammer, Ravnica, Theros, Strixhaven, Dragonlance, AI, SCAG, Locathah, Grung, Basic Rules 2014). `brief` (trait names only): Kithkin (no wikidot page) and the 99 third-party species. Dedupe rule in the comment above `listed`. Its header documents the extra fields (`spells`, `uses`, choice type `ability`, parts `if`, `ac`, `acBonus`, `unarmed`, `riders`, `critExtraMelee`). |
 | data/backgrounds-more.js | pushes the other 12 PHB (2024) backgrounds onto `DND.backgrounds` (load right after backgrounds.js), sorted by name; `source`. Feats/skills checked against D&D Beyond's public list; ability scores, tools, equipment from the PHB (paywalled). |
-| data/creation.js | `DND.creation`: standard array (+ by class), point buy, languages (standard/rare), alignments, equipment packs' contents, tool kinds (Artisan's Tools, Musical Instrument, Gaming Set), starting at higher levels. Checked against the Basic Rules 2026-10-04. Classes have `startingEquipment`, backgrounds `equipment` (options A/B(/C): `{ items, gp }`; item = text, `{ choose: [kinds], proficiency }` or `{ same: true }` = the background's tool). |
+| data/creation.js | `DND.creation`: standard array (+ by class), point buy, languages (standard/rare), alignments, equipment packs' contents, tool kinds (Artisan's Tools, Musical Instrument, Gaming Set), `otherTools` (Disguise Kit ... Thieves' Tools: a custom background's tool), starting at higher levels. Checked against the Basic Rules 2026-10-04. Classes have `startingEquipment`, backgrounds `equipment` (options A/B(/C): `{ items, gp }`; item = text, `{ choose: [kinds], proficiency }` or `{ same: true }` = the background's tool). |
 | data/summaries.js | loads after blood-hunter.js: sets `summary` (a few lines in our own words: what it is, how it plays) on the 14 classes, the 16 backgrounds and the 72 species with rules (none for `brief` ones). Shown by the maker's ▾ card buttons, Level 1's class cards and the multiclass pick. |
 | data/bodies.js | loads after summaries.js: `DND.bodies` = size heights (Tiny..Large, ft), per species `heights` (2024 "about X-Y ft", free rules + Aasimar), `table` (2014-era random height/weight row: base in, dice, base lb, multiplier), `age` ([adult, lives to] or a sentence), `like`. Used by maker.js Details (see Sheet maker). |
 | data/sheet-2014.js, data/sheet-2024.js | the blank classic (2014, 3 pages) and official 2024 sheets as base64 (`window.BLANK_SHEETS.classic / .official2024`), loaded by maker.js with a script tag only when needed (file:// can't fetch). |
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
-| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests, maker; `.lu` styles). `place()` with no numbers = where they open: centred, top 12px (user: Apply buttons must never start off screen; `.lu` max-height is 100vh - 24px). `window.aboutCard(card, { open, label, info, toggle })`: wraps a `.lu-card` button with a round ▾ button (`.lu-more`, absolute, top right; a button can't hold a button) that drops down `info` lines (`.lu-about`, at the end of the card); the caller keeps which are open (`M.about`, `L.about`) and redraws in toggle. Search boxes in `.lu-body` (any `input[type=search]`): on input, one below 40% of the visible body moves up near the top (its `.lu-pick`/`.lu-feat` heading too when within min(140px, 1/4 of the body)), smooth; a `.lu-room` spacer at the end of the body makes that reachable and keeps the place when results shrink (render() in levelup.js / maker.js keeps the spacer on a same-step redraw). |
+| app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests, maker; `.lu` styles). `place()` with no numbers = where they open: centred, top 12px (user: Apply buttons must never start off screen; `.lu` max-height is 100vh - 24px). `window.aboutCard(card, { open, label, info, toggle })`: wraps a `.lu-card` button with a round ▾ button (`.lu-more`, absolute, top right; a button can't hold a button) that drops down `info` lines (`.lu-about`, at the end of the card); the caller keeps which are open (`M.about`, `L.about`) and redraws in toggle. Works on `.lu-opt` and `.lu-spell` buttons too (smaller ▾; an open option spans its grid row). Search boxes in `.lu-body` (any `input[type=search]`): on input, one below 40% of the visible body moves up near the top (its `.lu-pick`/`.lu-feat` heading too when within min(140px, 1/4 of the body)), smooth; a `.lu-room` spacer at the end of the body makes that reachable and keeps the place when results shrink (render() in levelup.js / maker.js keeps the spacer on a same-step redraw). |
 | app/effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
 | marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
@@ -43,7 +43,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). Our own scrollbars (user, 2026-10-29: the default looked out of place): global `::-webkit-scrollbar` rules (dark red thumb, gold edge, wider on hover, gold while dragged; a brown one inside `.page`), Firefox gets `scrollbar-color` via `@supports not selector(::-webkit-scrollbar)`. Never set `scrollbar-width`/`scrollbar-color` elsewhere (only `none`): in Chromium 121+ either one switches the custom ones off for that box. Pseudo-element rules can't be nested (`&` can't stand for one). Search boxes' × is restyled too. |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (574 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (601 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -62,7 +62,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   multiline(name), spellLines() -> [{field, level (0 = cantrips, null = any), row (official sheet: level/time/range/notes/conc/ritual/material)}],
   writeSpell(line, spell), spellNamed(text), transaction(label, fn) (one Undo step for every write + sheetState change in fn), undo(), redo(),
   setMany([[field, value]...]) (writes all, then one refresh), weaponRows(), dmMark ('[DM allowed]') }`. `window.openPdf(file)` opens a PDF (resolves when loaded).
-- `window.levelUp.start({ key, target, picks })` (levelup.js), `window.maker = { open, state }` (maker.js), `window.aboutCard` (dialog.js, see Files).
+- `window.levelUp.start({ key, target, picks, background })` (levelup.js; background = the maker's custom one, read via `bgData()`), `window.maker = { open, state }` (maker.js), `window.aboutCard` (dialog.js, see Files).
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
   `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages,
   concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
@@ -354,7 +354,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   empty = the free rules' species and the Aasimar as cards; typed = every species matching by name, alias or book, ranked
   (name starts with it, a word does, a name holds it, the book does; free rules first), 30 shown + "N more match"; the
   chosen one stays as a card below (`.mk-chosen`). Full ones with size/Speed, brief ones "Names only". Brief species:
-  allowed, with a warning (no size/speed/traits rules). No "Other background".
+  allowed, with a warning (no size/speed/traits rules).
 - Info (user, 2026-10-29: "a small information window about each thing", below the title or a drop button on its right;
   the drop button was chosen: no hover flicker, works on touch): class, background and species cards have a ▾
   (dialog.js aboutCard) dropping down data/summaries.js's `summary` + class: level 1 features and subclass level;
@@ -368,9 +368,25 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   redraws only `.mk-body`. Tables and ages are from Claude's knowledge of the 2014-era books; the table rows were checked
   against a public list of D&D Beyond's height/weight rows (2026-10-29); the ages weren't checked (species without a
   confident age have none: "ask your DM").
+- Custom background (user, 2026-10-30: "set the main three stats yourself, starting equip, origin feat, look it up on D&D
+  Beyond"): a "Custom background" card after the 16 (M.bg = CUSTOM), its form below (`customForm`): name + "Look it up on
+  D&D Beyond ↗" (`/search?q=<name>`, checked to work; no name = `/backgrounds`), three ability chips (a 4th click drops the
+  oldest), Origin feat select (origin + dragonmark feats by book, or "Another feat" typed; Magic Initiate list chips), two
+  skills, a tool (tool kinds + `otherTools` or typed), option A items (lines or commas outside brackets) + GP; option B =
+  50 GP. `bg()` returns `customBg()` shaped like DND.backgrounds (`custom: true`), so every step and write() work as
+  before. Blocking problem: not exactly three abilities; warnings: no name/feat/tool, < 2 skills. create() passes
+  `background` to Level up, whose `bgData()` (L.bg, else C.backgroundData) gives the Origin feat (a feat outside the data
+  = "Other feat" with its name), Magic Initiate's list and the skills fallback.
 - The button lives in #pages, so it disappears once a sheet is open (F5 to make another).
 
 ## Level up (levelup.js) — decisions
+- ▾ info (user, 2026-10-30: "the dropdown info on pretty much anything that cannot fit its description in one line"):
+  `about(id, label, info, el, redraw)` -> dialog.js aboutCard, open ids in `L.about`. Compact cards (feats, subclasses:
+  `onePick({ about: prefix, redraw })`; opening also un-clips the text) add featInfo (prerequisite, ability increase,
+  repeatable, book) / subInfo (first features' text, later names, book). `multiPick` items take `info`: list items,
+  invocations (+ Needs, Repeatable), metamagic are clipped at `CLIP` = 90 chars (`small.clip`, hidden while open). Spells:
+  casting line + text; the list only refills (keeps its own scroll). Class cards: next level's features with text;
+  multiclass options: summary + multiclassing rules. Maker: equipment options with packs list their contents.
 - New character's level 1 (`L.first`: no class on the sheet; `start(opts)` from the maker, or the header button on a
   classless sheet): full class proficiencies (saves, armor, weapons, tools + `toolChoice` via 'mc:tools', skills via
   'mc:sk' with the class's count), HP = Hit Die max + CON (no roll), Max/Current HP and both Hit Dice boxes written, PB box
@@ -407,7 +423,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   fields can't be bold; text already there is left alone); weapons/tools/languages -> their official boxes, else Proficiencies; armor -> official armor checkboxes.
   A choice not made writes nothing (listed under "Still to choose"). Sheet text uses no → / ✓ (WinAnsi).
 - Weapon Mastery counts come from `weaponMastery.countByLevel` (Rogue/Paladin/Ranger have no table column for it).
-- Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too. The picker has search + a book filter
+- Feats: FEAT_CATS lets general/epic slots take origin and dragonmark feats too; origin slots take dragonmark feats (FotA). The picker has search + a book filter
   (`L.ui[f.id]`; the list refills without a full render so the search box keeps focus). Prerequisites checked: level,
   ability (`any` = one of), Spellcasting, armor training (`hasArmor`: official armor boxes, else classes' `armorTraining` /
   multiclass armor, armor feats on the sheet, Proficiencies text; no class = yes). Feat sub-picks use ids `f.id + ':sk'
@@ -432,7 +448,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 - maker.test.js: the button, both sheets with pictures, an Elf Cleric on the classic sheet (array swap, equipment/AC,
   details, every box written, Level 1 with skills, Divine Order, Magic Initiate (Wizard), lineage ability, spells) and a
   Human Monk 3 on the official sheet (PHB background + tool, size, point buy, 4d6 rolls, Monk tool -> 'mc:tools',
-  Versatile feat, the Level 2 / Level 3 chain). The Elf's Details: height/age/weight placeholders, weight chips by typed height.
+  Versatile feat, the Level 2 / Level 3 chain) and a Dwarf Fighter with a custom background (the D&D Beyond link, three abilities, a typed Origin feat reaching Level 1 as \ The Elf's Details: height/age/weight placeholders, weight chips by typed height.
 - beyond.test.js: out-of-reach feats/features/tags/species traits, the question (tick boxes, Keep, Ignore, Escape), the
   marks, the roll-log line, Undo/Redo, asking only after you leave the box, the PDF, Fighting Style (Paladin 1 vs 2), no
   class = no check, windows opening at the top. A test that loads a sheet with out-of-reach things must answer the question
@@ -453,7 +469,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   "Elf (Shadowmoor Elf)", Tireless not out of reach. speciessweep.test.js: every species with rules as a new Fighter,
   levels 1, 3, 5, every pick filled: no errors, traits written, spells on lines, nothing beyond the rules (~10 s).
   A test's own top-level `function levelUp` would replace window.levelUp: don't name helpers after app globals.
-- ui.test.js: summaries for every class/background/species with rules, nothing switching the custom scrollbars off, the
+- ui.test.js: ▾ on the custom background card, equipment packs, a feat (Tough, not chosen), a spell (list keeps its scroll), a multiclass option (spans the row), the next class level, a clipped invocation; summaries for every class/background/species with rules, nothing switching the custom scrollbars off, the
   maker's ▾ cards (class, background, species incl. names-only), the species search at the top (ranking, 30 + note, the
   chosen card), Level 1's class ▾, the multiclass summary, a feat search moving up (and staying put on fewer results, no
   jump on a pick), a Wizard's last spell search with no results (room added, gone on another step), sheet suggestions
@@ -509,7 +525,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   Tiefling variants aren't options.
 - Rests/resources not done: free-rules subclass uses (Wholeness of Body,
   Natural Recovery), Second Wind / Lay On Hands rolls from the counters, Magical Cunning's slot recovery, Relentless Rage DC.
-- Sheet maker, not done: our own sheet design (user: later); "Other background"; brief species' size/speed; Bard's three
+- Sheet maker, not done: our own sheet design (user: later); brief species' size/speed; Bard's three
   instruments aren't tied to the equipment instrument; starting magic items for higher levels are a note only.
 - Ideas suggested to the user and not built yet: Damage/Heal/Temp HP buttons, death saves roller, Heroic Inspiration and
   Lucky rerolls in the log, copy a roll as text, roller keyboard shortcuts, asking before loading another PDF over unsaved changes.

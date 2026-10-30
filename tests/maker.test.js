@@ -179,6 +179,51 @@ const feat = name => [...LU().querySelectorAll('.lu-feat')].find(s => s.querySel
   ok(btnIn(LU(), 'Close') && !btnIn(LU(), 'Level 4'), 'level 3 reached: Close');
   expect('Monk 3', { 'Text11': '3', 'Text17': '3d8', 'Text16': /^2\d$/ });
   ok(character.classes[0].level === 3, 'the app reads a Monk 3');
+  btnIn(LU(), 'Close').click();
+
+  // ---- a Fighter with a custom background (another book's), on the classic sheet
+  window.maker.open();
+  cardIn(MK(), 'Classic sheet').click();
+  step('Class'); cardIn(MK(), 'Fighter').click();
+  step('Background'); cardIn(MK(), 'Custom background').click();
+  const cf = () => MK().querySelector('.mk-custom'), typeAt = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+  const chipIn = (root, t) => [...root.querySelectorAll('.chip')].find(c => c.textContent === t);
+  const pickIn = title => [...cf().querySelectorAll('.lu-pick')].find(p => p.querySelector('.lu-pickhead b').textContent === title);
+  ok(cf() && cf().querySelector('a.mk-link')?.href === 'https://www.dndbeyond.com/backgrounds', 'the custom form, with a D&D Beyond link (the backgrounds list while it has no name)');
+  cf().querySelector('[data-keep="bgName"]').focus(); typeAt(cf().querySelector('[data-keep="bgName"]'), 'Haunted One');
+  ok(cf().querySelector('a.mk-link').href === 'https://www.dndbeyond.com/search?q=Haunted%20One' && document.activeElement === cf().querySelector('[data-keep="bgName"]'),
+    'a name: the link searches D&D Beyond for it; typing keeps the focus');
+  ok(/Haunted One/.test(MK().querySelector('.lu-sub').textContent), 'the window title names it');
+  for (const ab of ['STR', 'DEX', 'CON', 'WIS']) chipIn(pickIn('Ability scores it raises'), ab).click();
+  ok([...pickIn('Ability scores it raises').querySelectorAll('.chip.on')].map(c => c.textContent).join() === 'DEX,CON,WIS' && /3 \/ 3/.test(pickIn('Ability scores it raises').textContent),
+    'three ability scores: a fourth click drops the first one (STR)');
+  choose(pickIn('Origin feat').querySelector('select'), 'Another feat');
+  ok([...pickIn('Origin feat').querySelectorAll('optgroup')].some(g => g.label === "Player's Handbook (2024)") && [...pickIn('Origin feat').querySelectorAll('option')].some(o => o.value === 'Mark of Shadow'),
+    'Origin feats by book, Dragonmarks too');
+  typeAt(pickIn('Origin feat').querySelector('[data-keep="bgFeat"]'), 'Haunted Insight');
+  for (const sk of ['Arcana', 'Investigation', 'Survival']) chipIn(pickIn('Skill proficiencies'), sk).click();
+  choose(pickIn('Tool proficiency').querySelector('select'), 'Herbalism Kit');
+  typeAt(pickIn('Starting equipment (option A)').querySelector('textarea'), 'Crowbar, Pouch (a key, a charm)\nHolly sprig');
+  typeAt(pickIn('Starting equipment (option A)').querySelector('input'), '3');
+  step('Species'); cardIn(MK(), 'Dwarf').click();
+  step('Abilities');
+  ok(/Haunted One: DEX, CON, WIS/.test(MK().textContent) && MK().querySelectorAll('.mk-bonus .chip').length === 6, "Abilities: the background's three scores for +2 / +1");
+  step('Equipment');
+  ok(/Crowbar, Pouch \(a key, a charm\), Holly sprig, and 3 GP/.test(MK().textContent) && /50 GP to buy your own gear/.test(MK().textContent), 'Equipment: the typed items as option A, 50 GP as option B');
+  [...MK().querySelectorAll('.lu-cards')][1].querySelectorAll('.lu-card')[0].click(); // the background's option A
+  step('Details');
+  const f3 = label => [...MK().querySelectorAll('.mk-field')].find(l => l.firstChild.textContent === label)?.querySelector('input, select, textarea');
+  typeAt(f3('Character name'), 'Grey Watcher');
+  step('Review');
+  ok(!MK().querySelector('.mk-bad') && /Haunted One: Investigation, Survival, Herbalism Kit; Haunted Insight/.test(MK().textContent), 'Review: the custom background with its skills, tool and feat');
+  btnIn(MK(), 'Create sheet').click();
+  ok(await until(() => LU()), 'the sheet opens, Level 1 follows');
+  expect('the custom background written', { 'Background': 'Haunted One', 'Investigation ': '+1', 'Survival': '+2', 'Arcana': '-1', // INT 8, WIS 10; Arcana was dropped for Survival
+    'ProficienciesLang': /Tools: Herbalism Kit \(Haunted One\)/, 'Equipment': /Crowbar\nPouch \(a key, a charm\)\nHolly sprig/ });
+  luStep('Features');
+  const origin = feat('Origin feat');
+  ok(origin && /Haunted One background/.test(origin.textContent) && origin.querySelector('.lu-card.on b')?.textContent.startsWith('Other feat')
+    && origin.querySelector('.lu-after input')?.value === 'Haunted Insight', 'Level 1: the Origin feat from the custom background (a typed one: "Other feat")');
 } catch (err) { log('ERROR', err.stack); }
 document.title = 'DONE';
 })();

@@ -3223,7 +3223,28 @@ body.roller-open main {
     }
 }
 
-.lu-card .lu-about {
+/* the small buttons have one too (options, spells): a smaller ▾; an open option takes its whole row */
+.lu-cardwrap > :is(.lu-opt, .lu-spell) > b {
+    margin-right: 24px;
+}
+
+.lu-cardwrap:has(> .lu-opt, > .lu-spell) > .lu-more {
+    top: 4px;
+    right: 5px;
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+}
+
+.lu-opts > .lu-cardwrap.open {
+    grid-column: 1 / -1;
+}
+
+.lu-opt.open > small.clip {
+    display: none; /* the clipped text: all of it is in the lines below */
+}
+
+:is(.lu-card, .lu-opt, .lu-spell) .lu-about {
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -3231,6 +3252,8 @@ body.roller-open main {
     padding-top: 8px;
     border-top: 1px solid rgba(255, 216, 107, .2);
     white-space: normal;
+    font-size: 12.5px;
+    font-weight: normal;
     line-height: 1.45;
     color: var(--bone);
 
@@ -3239,6 +3262,7 @@ body.roller-open main {
     }
 
     & span {
+        font-size: inherit;
         color: inherit;
     }
 
@@ -3672,6 +3696,36 @@ body.roller-open main {
     }
 
     & .mk-chosen {
+        margin-top: 6px;
+    }
+
+    /* the custom background's form */
+    & .mk-custom {
+        margin-top: 8px;
+    }
+
+    & .mk-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 8px;
+
+        & .mk-field {
+            flex: 1 1 200px;
+        }
+    }
+
+    & .mk-link {
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    & .mk-gap {
+        margin-top: 6px;
+    }
+
+    & .mk-gp {
+        width: 9em;
         margin-top: 6px;
     }
 }

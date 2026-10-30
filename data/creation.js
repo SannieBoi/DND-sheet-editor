@@ -41,6 +41,8 @@ DND.creation = {
     'Musical Instrument': ['Bagpipes', 'Drum', 'Dulcimer', 'Flute', 'Horn', 'Lute', 'Lyre', 'Pan Flute', 'Shawm', 'Viol'],
     'Gaming Set': ['Dice', 'Dragonchess', 'Playing Cards', 'Three-Dragon Ante']
   },
+  // the other tools (not a kind): a custom background's tool can be one of these too
+  otherTools: ['Disguise Kit', 'Forgery Kit', 'Herbalism Kit', "Navigator's Tools", "Poisoner's Kit", "Thieves' Tools"],
   // Starting Equipment at Higher Levels (the DM decides): from level, extra money (gp + dice × per), magic items
   higherLevels: [
     { from: 2, gp: 0, items: '1 Common' },

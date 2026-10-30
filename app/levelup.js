@@ -46,7 +46,9 @@ let win = null; // the window
 
 // ---- The character before and after -----------------------------------------------------
 const cls = () => D.classes[L.key];
-const total = () => C.classes.reduce((t, c) => t + c.level, 0);
+// The background: a custom one from the sheet maker (start({ background })), else the one the Background box names
+const bgData = () => L?.bg || C.backgroundData;
+const total =() => C.classes.reduce((t, c) => t + c.level, 0);
 const classLevel = () => L.isNew ? 1 : C.classes.find(c => c.key === L.key).level + 1;
 const charLevel = () => total() + 1;
 const tableRow = lvl => cls().levels[lvl - 1];
@@ -76,7 +78,7 @@ function profLevel(key, ab) {
   const v = C[key], pb = C.profBonus, box = S.profBox(key), diff = typeof v === 'number' ? v - C.mods[ab] : null;
   if (box) return S.get(box) ? (diff != null && diff >= 2 * pb ? 2 : 1) : 0;
   if (diff != null) return diff >= 2 * pb ? 2 : diff >= pb ? 1 : 0;
-  return key.startsWith('skill:') && (C.backgroundData?.proficiencies ?? []).includes('Skill: ' + key.slice(6)) ? 1 : 0;
+  return key.startsWith('skill:') && (bgData()?.proficiencies ?? []).includes('Skill: ' + key.slice(6)) ? 1 : 0;
 }
 const skillAb = name => SKILLS.find(s => s.name === name).ability;
 
@@ -149,7 +151,7 @@ function gains() {
       text: `You learn ${plural(more('eldritchInvocations'), 'more invocation')}.` });
   }
   // a new character's level 1: the Origin feat of the background (preselected, see start())
-  const bg = L.first && C.backgroundData;
+  const bg = L.first && bgData();
   if (bg?.feat) out.push({ id: 'origin', name: 'Origin feat', src: `${bg.name} background`, kind: 'feature', choice: { type: 'feat', category: 'origin' },
     text: `Your background gives you an Origin feat: ${bg.feat}.` });
   const sp = C.speciesData, lv = charLevel();
@@ -203,7 +205,7 @@ function numbers() {
 // The feats a feat choice can take: Ability Score Improvement and General feats also allow Origin feats (no prerequisite)
 // (Dragonmark feats count as feats you can take at those levels too.)
 const FEAT_CATS = { general: ['general', 'origin', 'dragonmark'], 'epic-boon': ['epic-boon', 'general', 'origin', 'dragonmark'],
-  'fighting-style': ['fighting-style'], origin: ['origin'] };
+  'fighting-style': ['fighting-style'], origin: ['origin', 'dragonmark'] };
 const featOf = f => f.choice?.type === 'feat' && D.feats.find(x => x.name === L.picks[f.id]?.name) || null;
 // Armor training: the official sheet's armor boxes, else your classes (the first class's full training, later classes'
 // multiclass training), armor feats on the sheet and the Proficiencies text. Without a class it can't tell, so it says yes.
@@ -235,25 +237,37 @@ const featsFor = category => FEAT_CATS[category].flatMap(t => D.feats.filter(f =
 const pickHead = (title, n, of) => h('div', { class: 'lu-pickhead' }, h('b', {}, title),
   of != null ? h('span', { class: 'lu-count' + (n >= of ? ' full' : '') }, `${n} / ${of}`) : null);
 
-// Several of a list: items [{ name, note, off (why it can't be picked) }]
+// The ▾ on a card or option (dialog.js aboutCard): it drops down what doesn't fit in one line. redraw: what to draw
+// again after a click (a spell list only refills itself, so it keeps its own scroll)
+const about = (id, label, info, el, redraw = render) => window.aboutCard(el, { open: L.about.includes(id), label, info,
+  toggle: () => { toggle(L.about, id); redraw(); } });
+const fact = (label, text) => h('span', { class: 'lu-fact' }, h('em', {}, label), ' ', text);
+// A long text on a small button: about one line's worth, the rest under its ▾
+const CLIP = 90, clip = t => t && t.length > CLIP ? t.slice(0, CLIP - 2) + '…' : t;
+
+// Several of a list: items [{ name, note, off (why it can't be picked), info (lines for its ▾) }]
 function multiPick(id, count, items, title) {
   const chosen = L.picks[id] ||= [];
   return h('div', { class: 'lu-pick' }, pickHead(title, chosen.length, count),
     h('div', { class: 'lu-opts' }, items.map(it => {
-      const on = chosen.includes(it.name);
-      return h('button', { class: 'lu-opt' + (on ? ' on' : ''), disabled: !on && (!!it.off || chosen.length >= count), title: it.title,
-        onclick: () => { toggle(chosen, it.name); render(); } }, h('b', {}, it.name), it.off || it.note ? h('small', {}, it.off || it.note) : null);
+      const on = chosen.includes(it.name), info = (it.info || []).filter(Boolean);
+      const btn = h('button', { class: 'lu-opt' + (on ? ' on' : ''), disabled: !on && (!!it.off || chosen.length >= count), title: info.length ? null : it.title,
+        onclick: () => { toggle(chosen, it.name); render(); } }, h('b', {}, it.name),
+      it.off || it.note ? h('small', { class: !it.off && info.length ? 'clip' : null }, it.off || it.note) : null); // .clip: hidden while its ▾ is open
+      return info.length ? about(`${id}:${it.name}`, it.name, info, btn) : btn;
     })));
 }
 
-// One of a list, as cards with their text: items [{ name, text, off }]. after: shown right under the chosen card
-// (its own choices); compact: the cards not chosen show one line of their text.
-function onePick(get, set, items, { after = null, compact = false } = {}) {
+// One of a list, as cards with their text: items [{ name, text, off, info }]. after: shown right under the chosen card
+// (its own choices); compact: the cards not chosen show one line of their text, all of it with the ▾ open (about: an id
+// prefix for those, info: more lines under it); redraw: what a ▾ click draws again.
+function onePick(get, set, items, { after = null, compact = false, about: prefix = null, redraw = render } = {}) {
   return h('div', { class: 'lu-cards' + (compact ? ' compact' : '') }, items.map(it => {
     const on = get() === it.name;
-    return [h('button', { class: 'lu-card' + (on ? ' on' : ''), disabled: !!it.off, title: compact && !on ? it.text : null,
-      onclick: () => { set(it.name); render(); } }, h('b', {}, it.name, it.tag ? h('small', { class: 'lu-src' }, it.tag) : null), h('span', {}, it.off ? `Can't take it: ${it.off}` : it.text)),
-    on && after?.length ? h('div', { class: 'lu-after' }, after) : null];
+    const card = h('button', { class: 'lu-card' + (on ? ' on' : ''), disabled: !!it.off, title: compact && !on && !prefix ? it.text : null,
+      onclick: () => { set(it.name); render(); } }, h('b', {}, it.name, it.tag ? h('small', { class: 'lu-src' }, it.tag) : null), h('span', {}, it.off ? `Can't take it: ${it.off}` : it.text));
+    return [prefix ? about(`${prefix}:${it.name}`, it.name, it.off ? [it.text, ...it.info || []] : it.info, card, redraw) : card,
+      on && after?.length ? h('div', { class: 'lu-after' }, after) : null];
   }));
 }
 
@@ -315,10 +329,24 @@ function asiPick(p, max) {
 
 const FREE = 'Free rules';
 const bookOf = x => x.source || FREE;
+// What a feat card's ▾ adds to its summary: prerequisite, ability increase, repeatable, book
+function featInfo(x) {
+  const p = x.prerequisite || {}, ai = x.abilityIncrease, abs = p.ability && Object.keys(p.ability).filter(k => k !== 'any');
+  const pre = [p.minimum_level && `level ${p.minimum_level}+`, abs && abs.map(a => `${a} ${p.ability[a]}+`).join(p.ability.any ? ' or ' : ' and '),
+    p.feature_named && `the ${p.feature_named} feature`, p.armor && `${p.armor === 'Shields' ? 'Shield' : p.armor + ' armor'} training`, p.text].filter(Boolean).join('; ');
+  const inc = ai && (ai.options ? '+2 to one score or +1 to two'
+    : `+${ai.amount} to ${Array.isArray(ai.choose) ? ai.choose.join(' or ') : ai.choose === 'noSaveProf' ? 'a score whose save you lack' : 'any score'}${ai.unsure ? " (the list doesn't say which: check the book)" : ''}`);
+  return [pre ? fact('Prerequisite:', pre + '.') : null, inc ? fact('Ability score:', `${inc}, up to ${ai.max}.`) : null,
+    x.repeatable ? fact('Repeatable:', 'you can take it more than once.') : null, fact('Book:', bookOf(x) + '.')];
+}
+// A subclass card's ▾: what its first features do, the names of the later ones, the book
+const subInfo = (s, at) => [...s.features.filter(f => f.lvl === at).map(f => fact(`${f.name}:`, f.text || '')),
+  s.features.some(f => f.lvl > at) ? fact('Later:', s.features.filter(f => f.lvl > at).map(f => `${f.name} (${f.lvl})`).join(', ') + '.') : null,
+  fact('Book:', bookOf(s) + '.')];
 function featPick(f) {
   const ch = f.choice, p = L.picks[f.id] ||= { name: ch.category === 'general' ? 'Ability Score Improvement' : '' };
   const ui = L.ui[f.id] ||= { q: '', book: '' }, all = featsFor(ch.category).filter(x => !ch.only || ch.only.includes(x.name)); // only: the Blood Hunter's four styles
-  const items = all.map(x => ({ name: x.name, text: x.summary, off: blocked(x), tag: x.source ? bookOf(x).replace(/ \(2024\)$/, '') : null, book: bookOf(x) }));
+  const items = all.map(x => ({ name: x.name, text: x.summary, off: blocked(x), tag: x.source ? bookOf(x).replace(/ \(2024\)$/, '') : null, book: bookOf(x), info: featInfo(x) }));
   if (ch.or) items.push({ name: ch.or.name, text: `Instead of a feat: learn ${ch.or.cantrips} ${cap(ch.or.list)} cantrips; they count as ${cls().name} spells.` });
   if (!ch.only) items.push({ name: 'Other feat', text: 'A feat from another book: type its name below and add what it does yourself.' });
   const feat = D.feats.find(x => x.name === p.name), ai = feat?.abilityIncrease, fc = feat?.choice, extra = [];
@@ -354,7 +382,7 @@ function featPick(f) {
       textsPick(f.id + ':tools', 1, 'tool', 'Tools instead of skills (optional)'));
   }
   if (feat?.choice?.type === 'magicInitiate') {
-    p.list ||= feat.choice.lists.includes(C.backgroundData?.featList) ? C.backgroundData.featList : feat.choice.lists[0];
+    p.list ||= feat.choice.lists.includes(bgData()?.featList) ? bgData().featList : feat.choice.lists[0];
     const list = cap(p.list);
     extra.push(h('div', { class: 'chips' }, feat.choice.lists.map(l => h('button', { class: 'chip' + (p.list === l ? ' on' : ''),
       onclick: () => { p.list = l; L.spells[f.id + ':c'] = []; L.spells[f.id + ':1'] = []; render(); } }, cap(l) + ' list'))),
@@ -369,7 +397,7 @@ function featPick(f) {
   const fill = () => {
     const q = ui.q.trim().toLowerCase();
     const shown = items.filter(it => it.name === p.name || !it.book || (!ui.book || it.book === ui.book) && (!q || `${it.name} ${it.text}`.toLowerCase().includes(q)));
-    box.replaceChildren(onePick(() => p.name, n => { if (n !== p.name) dropSubPicks(f.id); p.name = n; }, shown, { after: extra, compact: true }));
+    box.replaceChildren(onePick(() => p.name, n => { if (n !== p.name) dropSubPicks(f.id); p.name = n; }, shown, { after: extra, compact: true, about: f.id, redraw: fill }));
   };
   fill();
   return [!ch.only && (books.length > 1 || all.length > 12) ? h('div', { class: 'lu-find' },
@@ -398,14 +426,14 @@ function spellIdsOf(f) {
 function subclassCards(get, set, other, uiId) {
   const c = cls(), ui = L.ui[uiId] ||= { q: '', book: '' }, at = c.features.find(f => f.choice?.type === 'subclass')?.lvl ?? 3;
   const items = subsOf(L.key).map(s => ({ name: s.name, book: bookOf(s), tag: s.source ? bookOf(s).replace(/ \(2024\)$/, '') : null,
-    text: (s.summary ? s.summary + ' ' : '') + `(${s.features.filter(f => f.lvl === at).map(f => f.name).join(', ')})` }));
+    text: (s.summary ? s.summary + ' ' : '') + `(${s.features.filter(f => f.lvl === at).map(f => f.name).join(', ')})`, info: subInfo(s, at) }));
   items.push({ name: OTHER_SUB, text: 'A subclass from another book or your DM: type its name; add its features yourself.' });
   const books = [...new Set(items.filter(it => it.book).map(it => it.book))], box = h('div');
   const after = [h('input', { type: 'text', class: 'lu-wide', value: other.other || '', placeholder: 'Subclass name', oninput: e => { other.other = e.target.value; } })];
   const fill = () => {
     const q = ui.q.trim().toLowerCase();
     const shown = items.filter(it => it.name === get() || !it.book || (!ui.book || it.book === ui.book) && (!q || `${it.name} ${it.text}`.toLowerCase().includes(q)));
-    box.replaceChildren(onePick(get, set, shown, { after: get() === OTHER_SUB ? after : [], compact: true }));
+    box.replaceChildren(onePick(get, set, shown, { after: get() === OTHER_SUB ? after : [], compact: true, about: uiId, redraw: fill }));
   };
   fill();
   return [items.length > 6 ? h('div', { class: 'lu-find' },
@@ -421,7 +449,7 @@ function subclassPick() {
 // List picks (maneuvers, blood curses, magic item plans ...): the ones on your sheet already, or of a higher level, are greyed out
 function listPick(f) {
   const list = listOf(f.choice.list), known = `${C.features ?? ''}\n${C.features2 ?? ''}`, lvl = classLevel();
-  return multiPick(f.id, countOf(f), list.items.map(it => ({ name: it.name, title: it.text || null, note: it.text && it.text.length > 90 ? it.text.slice(0, 88) + '…' : it.text,
+  return multiPick(f.id, countOf(f), list.items.map(it => ({ name: it.name, note: clip(it.text), info: it.text?.length > CLIP ? [it.text] : null,
     off: it.lvl > lvl ? `${cls().name} level ${it.lvl}+` : known.includes(it.name) ? 'on your sheet' : null })), list.title);
 }
 
@@ -451,11 +479,13 @@ function choiceUI(f) {
     case 'weaponMastery': return multiPick(f.id, n, weaponItems(), 'Weapon kinds to master');
     case 'invocations': {
       const known = `${C.features ?? ''}\n${C.features2 ?? ''}`;
-      return multiPick(f.id, n, D.classes.warlock.invocations.map(i => ({ name: i.name, title: i.text,
-        note: i.text.length > 90 ? i.text.slice(0, 88) + '…' : i.text,
+      return multiPick(f.id, n, D.classes.warlock.invocations.map(i => ({ name: i.name, note: clip(i.text),
+        info: [i.text, i.level > 1 ? fact('Needs:', `Warlock level ${i.level}+${i.requires ? `, ${i.requires}` : ''}.`) : i.requires ? fact('Needs:', i.requires + '.') : null,
+          i.repeatable ? fact('Repeatable:', 'you can take it more than once.') : null],
         off: i.level > classLevel() ? `Warlock level ${i.level}+` : !i.repeatable && known.includes(i.name) ? 'on your sheet' : null })), 'Invocations');
     }
-    case 'metamagic': return multiPick(f.id, n, D.classes.sorcerer.metamagic.map(m => ({ name: m.name, note: `${plural(m.cost, 'point')} · ${m.text}`,
+    case 'metamagic': return multiPick(f.id, n, D.classes.sorcerer.metamagic.map(m => ({ name: m.name, note: clip(`${plural(m.cost, 'point')} · ${m.text}`),
+      info: `${plural(m.cost, 'point')} · ${m.text}`.length > CLIP ? [fact('Cost:', plural(m.cost, 'Sorcery Point') + '.'), m.text] : null,
       off: `${C.features ?? ''}`.includes(m.name) ? 'on your sheet' : null })), 'Metamagic options');
     case 'spell': return spells([ch.level], [cap(ch.list)]);
     case 'spells': return spells(ch.levels || range(0, maxSpellLevel()), (ch.lists || [L.key]).map(cap), null);
@@ -645,12 +675,13 @@ function spellPick(id, o) {
       .sort((a, b) => chosen.includes(b.name) - chosen.includes(a.name) || a.level - b.level || a.name.localeCompare(b.name));
     listEl.replaceChildren(...items.map(s => {
       const on = chosen.includes(s.name), why = have.has(s.name) ? 'on your sheet' : other.has(s.name) ? 'picked elsewhere' : null;
-      return h('li', {}, h('button', { class: 'lu-spell' + (on ? ' on' : ''), disabled: !on && (!!why || chosen.length >= o.count),
-        title: s.text.replace(/\*+_?|_?\*+/g, '').slice(0, 500), onclick: () => { toggle(chosen, s.name); render(); } },
-      h('b', {}, s.name), h('span', {}, spellHint(s) + (why ? ' · ' + why : ''))));
+      return h('li', {}, about(`${id}:${s.name}`, s.name, spellInfo(s), h('button', { class: 'lu-spell' + (on ? ' on' : ''), disabled: !on && (!!why || chosen.length >= o.count),
+        onclick: () => { toggle(chosen, s.name); render(); } },
+      h('b', {}, s.name), h('span', {}, spellHint(s) + (why ? ' · ' + why : ''))), refill));
     }));
     if (!items.length) listEl.append(h('li', { class: 'lu-none' }, 'No spells match.'));
   };
+  const refill = () => { const top = listEl.scrollTop; fill(); listEl.scrollTop = top; }; // a ▾ keeps the list where it was
   fill();
   return h('div', { class: 'lu-pick', 'data-pick': id }, pickHead(o.title, chosen.length, o.count),
     chosen.length ? h('div', { class: 'chips' }, chosen.map(n => h('button', { class: 'chip on', title: 'Remove',
@@ -661,6 +692,9 @@ function spellPick(id, o) {
         h('option', { value: '' }, 'All levels'), levels.map(l => h('option', { value: l, selected: ui.lvl === l }, l ? 'Level ' + l : 'Cantrips'))) : null),
     listEl);
 }
+// A spell's ▾: casting time, range, components, duration, then its text
+const spellInfo = s => [fact('Casting:', [s.time, s.range, s.components, s.duration].filter(Boolean).join(' · ')),
+  ...s.text.replace(/\*+_?|_?\*+/g, '').split(/\n+/).map(t => t.trim()).filter(Boolean)];
 const spellHint = s => {
   const r = (s.dmg || s.heal) && window.calc.spellRoll(s);
   return [s.level ? 'Level ' + s.level : 'Cantrip', s.school, s.atk ? 'attack' : s.save ? s.save + ' save' : '', r ? r.text : '', s.conc ? 'Conc.' : '']
@@ -1033,6 +1067,9 @@ function classStep() {
     const c = D.classes[key], names = c.levels[lvl - 1].features;
     return `d${c.hitDie} Hit Die · ${names.length ? names.join(', ') : 'no new features'}`;
   };
+  // a class card's ▾: what each feature of that level (the subclass's too) does
+  const featuresAt = (c, lvl) => [...D.classes[c.key].features, ...c.sub?.features || []].filter(f => f.lvl === lvl && f.text)
+    .map(f => fact(`${f.name}:`, f.text));
   const others = Object.keys(D.classes).filter(k => !C.classes.some(c => c.key === k));
   if (L.first) { // a new character: any class, level 1 (the ▾ on a card says what the class is about, dialog.js)
     return [h('p', { class: 'lu-lead' }, `Which class does ${who()} start with?`),
@@ -1044,15 +1081,17 @@ function classStep() {
   const mc = L.isNew ? missingFor(L.key) : [];
   return [
     h('p', { class: 'lu-lead' }, `${who()} is level ${total()} (${C.classes.map(c => `${c.name} ${c.level}`).join(' / ')}). Which class gets level ${charLevel()}?`),
-    h('div', { class: 'lu-cards' }, C.classes.map(c => h('button', { class: 'lu-card' + (!L.isNew && L.key === c.key ? ' on' : ''), disabled: c.level >= 20,
-      onclick: () => choose(c.key, false) }, h('b', {}, `${c.name} ${c.level} → ${c.level + 1}`), h('span', {}, preview(c.key, c.level + 1)))),
+    h('div', { class: 'lu-cards' }, C.classes.map(c => about('next:' + c.key, `${c.name} ${c.level + 1}`, featuresAt(c, c.level + 1),
+      h('button', { class: 'lu-card' + (!L.isNew && L.key === c.key ? ' on' : ''), disabled: c.level >= 20,
+        onclick: () => choose(c.key, false) }, h('b', {}, `${c.name} ${c.level} → ${c.level + 1}`), h('span', {}, preview(c.key, c.level + 1))))),
     h('button', { class: 'lu-card' + (L.isNew ? ' on' : ''), onclick: () => choose(L.isNew ? L.key : others.find(k => !missingFor(k).length) || others[0], true) },
       h('b', {}, 'A new class (multiclass)'), h('span', {}, 'Level 1 in another class: its Hit Die, some of its proficiencies and its level 1 features.'))),
     L.isNew ? h('div', { class: 'lu-pick' }, pickHead('New class'),
       h('div', { class: 'lu-opts' }, others.map(k => {
-        const miss = missingFor(k);
-        return h('button', { class: 'lu-opt' + (L.key === k ? ' on' : ''), onclick: () => choose(k, true), title: miss.join('; ') || null },
-          h('b', {}, D.classes[k].name), h('small', {}, miss.length ? 'needs ' + needText(D.classes[k].multiclass) : `d${D.classes[k].hitDie}`));
+        const miss = missingFor(k), c = D.classes[k];
+        return about('mc:' + k, c.name, [c.summary, fact('Multiclassing:', c.multiclass.text), miss.length ? fact('You need:', miss.join('; ') + '.') : null],
+          h('button', { class: 'lu-opt' + (L.key === k ? ' on' : ''), onclick: () => choose(k, true) },
+            h('b', {}, c.name), h('small', {}, miss.length ? 'needs ' + needText(c.multiclass) : `d${c.hitDie}`)));
       })),
       cls().summary ? h('p', { class: 'lu-note lu-blurb' }, cls().summary) : null,
       h('p', { class: 'lu-note' }, cls().multiclass.text),
@@ -1257,12 +1296,13 @@ function confirmBox(title, text, okLabel, onOk, noLabel = 'Not now') {
 }
 
 // opts: { key (a new character's class, chosen in the sheet maker: no Class step), target (the level to reach: a button to
-// the next Level up after Apply), picks (choices already made, e.g. the Monk's tool or an Elf's lineage ability) }.
+// the next Level up after Apply), picks (choices already made, e.g. the Monk's tool or an Elf's lineage ability),
+// background (a custom background from the maker, shaped like DND.backgrounds: its Origin feat for level 1) }.
 // With no class on the sheet it is a new character's level 1 (L.first): all of the class's proficiencies, the Hit Die's
 // highest number for HP, and the background's Origin feat.
 function start(opts = {}) {
   const first = !C.classes.length, key = opts.key || (first ? 'fighter' : C.classes[0].key);
-  L = { key, isNew: first, first, fixedClass: !!opts.key, target: opts.target || null, picks: { ...opts.picks }, spells: {}, ui: {}, about: [],
+  L = { key, isNew: first, first, fixedClass: !!opts.key, target: opts.target || null, picks: { ...opts.picks }, spells: {}, ui: {}, about: [], bg: opts.background || null,
     hp: { mode: 'fixed', roll: null }, off: new Set(), stepId: null,
     dirty() { return this.stepIndex > 0 || Object.keys(this.picks).length > 0 || this.isNew || this.hp.roll != null; } };
   if (first) presetFirst();
@@ -1271,8 +1311,8 @@ function start(opts = {}) {
 }
 // The Origin feat comes preselected from the background (it can still be changed)
 function presetFirst() {
-  const bg = C.backgroundData;
-  if (bg?.feat && !L.picks.origin) L.picks.origin = { name: bg.feat };
+  const bg = bgData();
+  if (bg?.feat && !L.picks.origin) L.picks.origin = D.feats.some(f => f.name === bg.feat) ? { name: bg.feat } : { name: 'Other feat', other: bg.feat };
 }
 // Class skills (and tools) a new character still has to pick
 const missingFirst = () => L.first && ((L.picks['mc:sk'] || []).length < cls().skills.choose ||
