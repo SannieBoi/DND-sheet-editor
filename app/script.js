@@ -145,7 +145,7 @@ for (const [ab, full] of Object.entries(D.rules.abilities)) {
 const SPELL_BY_NORM = new Map(D.spells.map(s => [norm(s.name), s]));
 const AMBIGUOUS = new Set(['Light', 'Shield', 'Fly', 'Slow', 'Haste', 'Command', 'Message', 'Heal', 'Harm', 'Sleep', 'Wish',
   'Resistance', 'Mending', 'Silence', 'Alarm', 'Symbol', 'Teleport', 'Dream', 'Weird', 'Confusion', 'Guidance', 'Darkness',
-  'Darkvision', 'Aid', 'Jump', 'Divination', 'Creation', 'Bane']); // the sense, "Land's Aid", "High Jump", the school, "Words of Creation", the god
+  'Darkvision', 'Aid', 'Jump', 'Divination', 'Creation', 'Bane', 'Sanctuary']); // the sense, "Land's Aid", "High Jump", the school, "Words of Creation", the god, "Twilight Sanctuary"
 const SPELL_RES = D.spells.filter(s => !AMBIGUOUS.has(s.name)).map(s => [s, new RegExp('\\b' + escapeRe(s.name) + '\\b', 'g')]);
 const spellNamed = text => SPELL_BY_NORM.get(norm(String(text ?? '').replace(/\(.*?\)/g, ''))) || null;
 
@@ -225,7 +225,7 @@ for (const [key, c] of Object.entries(D.classes)) {
 // Names other things give too (subclasses outside the free rules, feats, invocations, items): only a class level short
 // of it counts, not a missing class
 const SHARED_FEATURES = new Set(['Spellcasting', 'Extra Attack', 'Expertise', 'Weapon Mastery', 'Fighting Style', 'Evasion',
-  'Unarmored Defense', 'Bonus Proficiencies', 'Metamagic', 'Eldritch Invocations', 'Pact Magic', 'Channel Divinity', 'Uncanny Dodge']);
+  'Unarmored Defense', 'Bonus Proficiencies', 'Bonus Proficiency', 'Expanded Spell List', 'Metamagic', 'Eldritch Invocations', 'Pact Magic', 'Channel Divinity', 'Uncanny Dodge']);
 const CLASS_TAG = new RegExp(`\\b(${Object.values(D.classes).map(c => c.name).join('|')})\\s+(\\d+)\\b`, 'i');
 const FEAT_NAMES = new Set(D.feats.flatMap(f => [f.name, ...f.aliases || []]).map(norm));
 
@@ -234,7 +234,7 @@ function featWhy(f) {
   const p = f.prerequisite, c = character;
   if (p?.minimum_level && c.level && c.level < p.minimum_level) return `a feat for level ${p.minimum_level} and up; the sheet says level ${c.level}`;
   if (p?.feature_named === 'Fighting Style' && c.classes.length &&
-    !c.classes.some(x => D.classes[x.key].features.some(g => g.lvl <= x.level && g.choice?.category === 'fighting-style'))) {
+    !c.classes.some(x => [...D.classes[x.key].features, ...x.sub?.features || []].some(g => g.lvl <= x.level && g.choice?.category === 'fighting-style'))) {
     return 'needs the Fighting Style feature (Fighter 1, Paladin 2, Ranger 2)';
   }
   return null;
@@ -299,7 +299,7 @@ function parseClasses(text, fallbackLevel) {
 // ("Fighter 3 (Battle Master)"), then in the Subclass box, by its name or short name ("Zealot", "Life"; class names are
 // taken out first, so the Ranger's Hunter isn't found in "Blood Hunter"); the longest match wins. Failing that, its full
 // name on a feature line, as the level-up writes it ("Frenzy (Path of the Berserker): ...").
-const SUB_PREFIX = /^(Path|College|Circle|Oath|Warrior|Order) of (the )?| (Domain|Patron|Sorcery)$/g;
+const SUB_PREFIX = /^(Path|College|Circle|Oath|Warrior|Order|Way) of (the )?|^The | (Domain|Patron|Sorcery|Magic)$/g;
 const subWords = s => [s.name, ...(s.short || s.name.replace(SUB_PREFIX, '')).split('|')];
 function subclassOf(key, classText = character.classLevel, subText = character.subclass, featureText = `${character.features ?? ''}\n${character.features2 ?? ''}`) {
   const c = D.classes[key], subs = c.subclasses || [c.subclass];
@@ -824,7 +824,7 @@ let step = null, replaying = false, stateMark = '{}'; // sheetState as of the la
 const fieldText = name => { const v = currentValue(name); return Array.isArray(v) ? v.join('\n') : v ?? ''; };
 const changedStep = s => s.state || [...s.changes.values()].some(c => c.before !== c.after);
 const stateJSON = () => JSON.stringify({ ...sheetState, extraPages: undefined }); // extraPages only matters to the download
-const STATE_LABELS = { marble: 'Killing Marble', mode: 'Sheet mode', effects: 'Effects', concentration: 'Concentration',
+const STATE_LABELS = { marble: 'Killing Marble', mode: 'Sheet mode', effects: 'Effects', spellsOn: 'Spells on you', concentration: 'Concentration',
   used: 'Feature uses', slotsUsed: 'Spell slots', hitDiceSpent: 'Hit Point Dice', beyondIgnored: 'Beyond the rules' };
 
 function newStep(s) {

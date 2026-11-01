@@ -342,7 +342,8 @@ function featInfo(x) {
 // A subclass card's ▾: what its first features do, the names of the later ones, the book
 const subInfo = (s, at) => [...s.features.filter(f => f.lvl === at).map(f => fact(`${f.name}:`, f.text || '')),
   s.features.some(f => f.lvl > at) ? fact('Later:', s.features.filter(f => f.lvl > at).map(f => `${f.name} (${f.lvl})`).join(', ') + '.') : null,
-  fact('Book:', bookOf(s) + '.')];
+  fact('Book:', bookOf(s) + '.'),
+  s.legacy ? fact('2014 rules:', 'an older book, used with the 2024 rules: what came below level 3 comes at 3.' + (typeof s.legacy === 'string' ? ' ' + s.legacy : '')) : null];
 function featPick(f) {
   const ch = f.choice, p = L.picks[f.id] ||= { name: ch.category === 'general' ? 'Ability Score Improvement' : '' };
   const ui = L.ui[f.id] ||= { q: '', book: '' }, all = featsFor(ch.category).filter(x => !ch.only || ch.only.includes(x.name)); // only: the Blood Hunter's four styles
@@ -464,7 +465,8 @@ const weaponItems = () => {
 
 // The picker for a feature's choice
 function choiceUI(f) {
-  const ch = f.choice, n = countOf(f), spells = (levels, lists, school) => spellPick(f.id, { count: n, levels, lists, school, title: `Choose ${plural(n, 'spell')}` });
+  const ch = f.choice, n = countOf(f), spells = (levels, lists, school) => spellPick(f.id, { count: n, levels, lists, school, title: ch.title || `Choose ${plural(n, 'spell')}`,
+    extra: lists?.includes(cls().name) ? expandedSpells() : null });
   switch (ch.type) {
     case 'subclass': return subclassPick();
     case 'feat': return featPick(f);
@@ -488,7 +490,7 @@ function choiceUI(f) {
       info: `${plural(m.cost, 'point')} · ${m.text}`.length > CLIP ? [fact('Cost:', plural(m.cost, 'Sorcery Point') + '.'), m.text] : null,
       off: `${C.features ?? ''}`.includes(m.name) ? 'on your sheet' : null })), 'Metamagic options');
     case 'spell': return spells([ch.level], [cap(ch.list)]);
-    case 'spells': return spells(ch.levels || range(0, maxSpellLevel()), (ch.lists || [L.key]).map(cap), null);
+    case 'spells': return spells(ch.levels || range(0, maxSpellLevel()), ch.lists === 'any' ? null : (ch.lists || [L.key]).map(cap), ch.school || null);
     case 'spellbook': return spells(range(1, ch.maxLevel || maxSpellLevel()), ['Wizard'], ch.school);
     case 'option': return onePick(() => L.picks[f.id], v => { L.picks[f.id] = v; }, ch.options);
     case 'lineage': return lineagePick(f);
@@ -562,7 +564,7 @@ function featureLine(f) {
   const opt = f.choice.type === 'option' && f.choice.options.find(o => o.name === p);
   // a species trait keeps its text: "Kenku Recall (Kenku): Arcana, History. Proficiency in two skills ...", "Shifting
   // (Shifter): Bonus Action: ... Beasthide: 1d6 more Temporary HP ..." (a lineage writes only its pick, as before)
-  if (f.kind === 'species' && f.choice.type !== 'lineage') {
+  if ((f.kind === 'species' || f.keepText) && f.choice.type !== 'lineage') {
     if (!opt) return `${f.name} (${f.src}): ${pt}. ${f.text}`;
     const chosen = [opt.text ? '' : opt.name, ...gains().filter(g => g.part === f.id).map(pickText)].filter(Boolean);
     return `${f.name} (${f.src}): ${f.text}${opt.text ? ` ${opt.name}: ${opt.text}` : ''}${chosen.length ? ` Chosen: ${chosen.join('; ')}.` : ''}`;
@@ -640,6 +642,7 @@ function spellPlan() {
   if (subSpells && !subSpells.arid) for (const n of subSpells[lvl] || []) add(n, sub.data.name);
   for (const n of spellsFromChoice(sub.data)[lvl] || []) add(n, sub.data.name);
   plan.land = subSpells?.arid && subSpells.arid[lvl] ? true : false;
+  plan.extra = plan.caster ? expandedSpells() : [];
   for (const t of C.lineage?.traits || []) if (t.lvl === charLevel()) add((spellByName(t.name) || S.spellNamed(t.name))?.name, C.lineage.name.split(': ').pop());
   plan.slots = { before: slotsFor(C.classes), after: slotsFor(newClasses()) };
   plan.slotsChange = plan.slots.before.some((n, i) => n !== plan.slots.after[i]);
@@ -647,6 +650,20 @@ function spellPlan() {
   return plan;
 }
 
+// The spells a 2014 Warlock patron adds to the class's list (subclasses-2014.js `expanded`, and an option's: the Genie's
+// kind, picked now or read from that feature's line on the sheet, "Genie's Vessel (The Genie): ... Dao: ...")
+function expandedSpells() {
+  const s = subclass().data, out = [...s?.expanded || []];
+  const text = `${C.features ?? ''}\n${C.features2 ?? ''}`.split('\n');
+  for (const f of s?.features || []) {
+    const opts = f.choice?.type === 'option' ? f.choice.options.filter(o => o.grants?.expanded) : [];
+    if (!opts.length) continue;
+    const g = gains().find(x => x.id === `s${f.lvl}:${f.name}`), line = text.find(l => l.trim().startsWith(f.name)) || '';
+    const o = g ? opts.find(o => o.name === L.picks[g.id]) : opts.find(o => line.includes(` ${o.name}:`) || line.includes(`: ${o.name} - `));
+    if (o) out.push(...o.grants.expanded);
+  }
+  return out;
+}
 // Spells that follow an option of a subclass feature (Vestige Spells: a Cleric domain's spells) -> { classLevel: [names] }.
 // The option is picked at this level, or read from that feature's line on the sheet ("Vestige Spells (...): War - ...").
 function spellsFromChoice(s) {
@@ -669,6 +686,7 @@ function spellPick(id, o) {
   const have = known(), other = pickedSpells(id);
   const pool = D.spells.filter(s => o.levels.includes(s.level) && (!o.lists || s.classes.some(c => o.lists.includes(c))) && (!o.school || s.school === o.school)
     && (!o.schools || o.schools.includes(s.school)) && (!o.ritual || s.ritual));
+  for (const s of (o.extra || []).map(spellByName)) if (s && o.levels.includes(s.level) && !pool.includes(s)) pool.push(s); // a patron's expanded spells
   const levels = [...new Set(pool.map(s => s.level))].sort((a, b) => a - b);
   const listEl = h('ul', { class: 'lu-spells' });
   const fill = () => {
@@ -695,8 +713,9 @@ function spellPick(id, o) {
     listEl);
 }
 // A spell's ▾: casting time, range, components, duration, then its text
-const spellInfo = s => [fact('Casting:', [s.time, s.range, s.components, s.duration].filter(Boolean).join(' · ')),
-  ...s.text.replace(/\*+_?|_?\*+/g, '').split(/\n+/).map(t => t.trim()).filter(Boolean)];
+const spellInfo = s => s.text ? [fact('Casting:', [s.time, s.range, s.components, s.duration].filter(Boolean).join(' · ')),
+  ...s.text.replace(/\*+_?|_?\*+/g, '').split(/\n+/).map(t => t.trim()).filter(Boolean)]
+  : [`${s.level ? 'Level ' + s.level : 'Cantrip'}, ${s.school}${s.conc ? ', Concentration' : ''}${s.ritual ? ', Ritual' : ''}. The free rules don't describe it: see the book.`];
 const spellHint = s => {
   const r = (s.dmg || s.heal) && window.calc.spellRoll(s);
   return [s.level ? 'Level ' + s.level : 'Cantrip', s.school, s.atk ? 'attack' : s.save ? s.save + ' save' : '', r ? r.text : '', s.conc ? 'Conc.' : '']
@@ -715,6 +734,7 @@ function collect() {
     if (g.languages) out.languages.push(...g.languages);
     if (g.tools) out.tools.push(...g.tools);
     if (g.skills) out.skills.push(...g.skills.filter(n => !profLevel('skill:' + n, skillAb(n))));
+    if (g.expertise) out.expertise.push(...g.expertise);
     if (g.jackOfAllTrades) out.jack = f;
   };
   for (const f of gains()) {
@@ -948,7 +968,7 @@ function changes() {
 
   // Spells
   const plan = spellPlan(), picked = [];
-  const pushSpells = (id, why, max = Infinity) => { for (const n of (L.spells[id] || []).slice(0, max)) picked.push({ spell: D.spells.find(s => s.name === n), why }); };
+  const pushSpells = (id, why, max = Infinity) => { for (const n of (L.spells[id] || []).slice(0, max)) picked.push({ spell: spellByName(n), why }); };
   pushSpells('cantrips', 'new cantrip', plan.cantrips);
   pushSpells('prepared', 'new prepared spell', plan.prepared);
   pushSpells('book', 'added to your spellbook', plan.book);
@@ -964,7 +984,7 @@ function changes() {
   for (const k of ['swap0', 'swap1']) {
     const sw = L.swap[k], to = (L.spells[k] || [])[0];
     if (!sw.from || !to) continue;
-    const line = S.spellLines().find(l => S.spellNamed(S.get(l.field))?.name === sw.from), s = D.spells.find(x => x.name === to);
+    const line = S.spellLines().find(l => S.spellNamed(S.get(l.field))?.name === sw.from), s = spellByName(to);
     add('Spells', 81, line ? { id: 'swap:' + k, label: `${sw.from} → ${to}`, note: 'replaces it on its line', apply: () => S.writeSpell(line, s) }
       : { label: `${sw.from} → ${to}`, note: `${sw.from} isn't on a spell line: swap it yourself.` });
   }
@@ -1183,24 +1203,26 @@ function spellsStep() {
   if (plan.caster) {
     const whose = tbl.list === c.name ? c.name : `${tbl.list} (${subclass().name})`;
     out.push(h('p', { class: 'lu-lead' }, `${whose} spells at ${c.name} level ${classLevel()}: ${tbl.cantrips} cantrips, ${tbl.prepared} prepared spells, up to level ${max}` +
-      (lists.length > 1 ? ` (${plan.listsWhy}: also ${lists.slice(1).join(', ')} spells).` : '.')));
+      (lists.length > 1 ? ` (${plan.listsWhy}: also ${lists.slice(1).join(', ')} spells).` : '.') +
+      (plan.extra.length ? ` Your patron adds ${plan.extra.length} spells to your list.` : '')));
   }
-  if (plan.cantrips > 0) out.push(spellPick('cantrips', { count: plan.cantrips, levels: [0], lists, title: `New ${plural(plan.cantrips, 'cantrip')}` }));
+  const extra = plan.extra;
+  if (plan.cantrips > 0) out.push(spellPick('cantrips', { count: plan.cantrips, levels: [0], lists, extra, title: `New ${plural(plan.cantrips, 'cantrip')}` }));
   if (plan.book > 0) out.push(spellPick('book', { count: plan.book, levels: range(1, max), lists: ['Wizard'], title: `Add ${plural(plan.book, 'spell')} to your spellbook` }));
-  if (plan.prepared > 0) out.push(spellPick('prepared', { count: plan.prepared, levels: range(1, max), lists, title: `${plural(plan.prepared, 'more prepared spell')}` }));
+  if (plan.prepared > 0) out.push(spellPick('prepared', { count: plan.prepared, levels: range(1, max), lists, extra, title: `${plural(plan.prepared, 'more prepared spell')}` }));
   if (plan.always.length) {
     out.push(h('div', { class: 'lu-pick' }, pickHead('Always prepared (added for you)'),
       h('ul', { class: 'lu-list' }, plan.always.map(a => h('li', {}, h('b', {}, a.spell.name), ` · ${spellHint(a.spell)} · ${a.why}`)))));
   }
   if (plan.caster && !L.isNew) { // each level you may swap one cantrip and one spell
-    const mine = lvl0 => C.spells.filter(x => x.from === 'sheet' && (x.spell.level === 0) === lvl0 && x.spell.classes.some(n => lists.includes(n))).map(x => x.spell.name);
+    const mine = lvl0 => C.spells.filter(x => x.from === 'sheet' && (x.spell.level === 0) === lvl0 && (x.spell.classes.some(n => lists.includes(n)) || extra.includes(x.spell.name))).map(x => x.spell.name);
     for (const [k, lvl0, what] of [['swap0', true, 'cantrip'], ['swap1', false, 'spell']]) {
       const have = mine(lvl0), sw = L.swap[k];
       if (!have.length) continue;
       out.push(h('div', { class: 'lu-pick' }, pickHead(`Replace a ${what} (optional)`),
         h('select', { class: 'lu-wide', onchange: e => { sw.from = e.target.value; L.spells[k] = []; render(); } },
           h('option', { value: '' }, `Keep all my ${what}s`), have.map(n => h('option', { value: n, selected: sw.from === n }, n))),
-        sw.from ? spellPick(k, { count: 1, levels: lvl0 ? [0] : range(1, max), lists, title: `Instead of ${sw.from}` }) : null));
+        sw.from ? spellPick(k, { count: 1, levels: lvl0 ? [0] : range(1, max), lists, extra, title: `Instead of ${sw.from}` }) : null));
     }
   }
   if (plan.slotsChange) {

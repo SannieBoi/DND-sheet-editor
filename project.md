@@ -20,7 +20,8 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 |---|---|
 | lib/pdf.min.js, lib/pdf.worker.min.js (pdf.js 3.11.174), lib/pdf-lib.min.js | render PDF / write PDF. Never edit. |
 | data/ rules, weapons, armor, classes, feats, species, backgrounds, spells .js | rules data -> `window.DND` (see "Rules data" below). spells.js = 339 SRD 5.2 spells, roll data hand-checked for 102 (built by a parser from github.com/springbov/dndsrd5.2_markdown). |
-| data/subclasses.js | loads right after classes.js: sets `DND.classes.<key>.subclasses = [free-rules subclass, ...]` for the 12 classes: the other 36 PHB subclasses + Heroes of Faerûn (8), Ravenloft: The Horrors Within (6), Arcana Unleashed (8), D&D Beyond Drops Oct 2026 (Sorrow Knight), Xanathar's Guide (Divine Soul, 2014) = 60 more, 72 in all. Facts from dnd2024.wikidot.com (2026-10-28), summaries in our own words. Schema extras in its header (summary, short, spells, spellsFrom, spellLists, savant, spellcasting 'third', lists, riders, `more` choices). Also gives the free-rules subclasses a `summary`. |
+| data/subclasses.js | loads right after classes.js: sets `DND.classes.<key>.subclasses = [free-rules subclass, ...]` for the 12 classes: the other 36 PHB subclasses + Heroes of Faerûn (8), Ravenloft: The Horrors Within (6), Arcana Unleashed (8), D&D Beyond Drops Oct 2026 (Sorrow Knight) = 59 more, 71 in all. Facts from dnd2024.wikidot.com (2026-10-28), summaries in our own words. Schema extras in its header (summary, short, spells, spellsFrom, savant, spellcasting 'third', lists, riders, `more` choices). Also gives the free-rules subclasses a `summary`. |
+| data/subclasses-2014.js | loads after blood-hunter.js (needs spells.js: pushes a Branding Smite name-only stub): pushes onto `DND.classes.<key>.subclasses` the 55 subclasses of the older (2014-rules) books that the 2024 books haven't replaced (PHB 2014, DMG 2014, SCAG, Xanathar's, Tasha's, Wildemount, Fizban's, Dragonlance, Bigby's; Divine Soul moved here), 126 for the 12 classes. Which: the tables of contents of D&D Beyond's source pages (2026-10-31); facts from dnd5e.wikidot.com, summaries in our own words. Each gets `legacy` (true or a note for the ▾). Header documents the extras: `expanded` (2014 Warlock Expanded Spell List, an option's `grants.expanded`), `spellLists`, a feature's `keepText`, choice 'spells' with `lists: 'any'` + `school`, `grants.expertise`, rider `pb`. |
 | data/artificer.js, data/blood-hunter.js | load after spells.js. `DND.classes.artificer` (Forge of the Artificer: levels with plansKnown/magicItems, lists.plans, 5 FotA subclasses + Reanimator; tags 'Artificer' onto the SRD spells of its list; pushes a Summon Construct name-only stub into spellListOnly). `DND.classes.bloodhunter` (Matthew Mercer's 2020 class from D&D Beyond, written for 2014 rules: hemocraftDie/bloodCurses/bloodMaledict/crimsonRites columns, lists.bloodCurses/.rites, multiclass.requiresOneOf, 4 orders; Profane Soul = `spellcasting.type 'pact'`). Both set `subclass` = their first subclass too. |
 | data/feats-more.js | pushes onto `DND.feats` (loads right after feats.js): the rest of the 2024 PHB (58 feats) in full, and `brief` entries (names, category, ability increase, part names from D&D Beyond's public list; "see the book") for the feats of Forge of the Artificer, Heroes of Faerûn, Lorwyn: First Light. 140 feats. Fields in its header (`source`, `brief`, `unless`, `aliases`, prerequisite `armor`/`text`, choice types). |
 | data/species-more.js | pushes onto `DND.species` (loads right after species.js) EVERY species on D&D Beyond's species list (user asked for all, no duplicates): 172 in all. With their rules (summaries in our own words): the PHB Aasimar and 62 official species from wikidot (2026-10-28: dnd2024.wikidot.com for Forge of the Artificer, Lorwyn, Ravenloft: The Horrors Within, Drops; dnd5e.wikidot.com for MotM, Spelljammer, Ravnica, Theros, Strixhaven, Dragonlance, AI, SCAG, Locathah, Grung, Basic Rules 2014). `brief` (trait names only): Kithkin (no wikidot page) and the 99 third-party species. Dedupe rule in the comment above `listed`. Its header documents the extra fields (`spells`, `uses`, choice type `ability`, parts `if`, `ac`, `acBonus`, `unarmed`, `riders`, `critExtraMelee`). |
@@ -32,10 +33,11 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | data/sheets.js | `DND.sheets`: field maps of PDFs with meaningless field names. Holds the official WotC 2024 sheet (Text1, Check Box3...). script.js detects it (`detect`: page count + field names) and uses the map instead of `FIELD_MAP`. Its Feats box key is `featsText` (not `feats`: that name is taken by `character.feats`). |
 | app/script.js | core: PDF load/render/overlay fields, field matching (`FIELD_MAP`, or the `sheetMap` from sheets.js), `character`, autocomplete, stat propagation, weapon/spell math, spell lines, zoom, download. |
 | app/dialog.js | `window.ask({ title, text, body, buttons:[{label,value,primary}] })` -> Promise of the clicked value (null on Escape / click outside). The one question box for every script (`.ask` styles). Also `window.draggable(win, handle)` -> place(x, y): the non-modal windows you drag by the title bar (level up, rests, maker; `.lu` styles). `place()` with no numbers = where they open: centred, top 12px (user: Apply buttons must never start off screen; `.lu` max-height is 100vh - 24px). `window.aboutCard(card, { open, label, info, toggle })`: wraps a `.lu-card` button with a round ▾ button (`.lu-more`, absolute, top right; a button can't hold a button) that drops down `info` lines (`.lu-about`, at the end of the card); the caller keeps which are open (`M.about`, `L.about`) and redraws in toggle. Works on `.lu-opt` and `.lu-spell` buttons too (smaller ▾; an open option spans its grid row). Search boxes in `.lu-body` (any `input[type=search]`): on input, one below 40% of the visible body moves up near the top (its `.lu-pick`/`.lu-feat` heading too when within min(140px, 1/4 of the body)), smooth; a `.lu-room` spacer at the end of the body makes that reachable and keeps the place when results shrink (render() in levelup.js / maker.js keeps the spacer on a same-step redraw). |
-| app/effects.js | effects tray (bottom left): concentration, conditions, user debuffs, providers; `effects.forRoll()` used by every roll. |
+| app/effects.js | effects tray (bottom left, above the turn bar): concentration, spells on you (`SPELLS_ON` table), conditions, class feature states (`STATES`: Raging, Dodging, Steady Aim, Large Form ...), user debuffs, providers; `effects.forRoll()` used by every roll; `speed()` / `attacks()` for the turn bar. See "Turn bar and spells on you". |
 | marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
-| app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
+| app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table) and what they can be spent on (`ACTIONS`: buttons under each feature), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
+| app/turn.js | the turn bar (`#turnbar`, docked at the bottom of the sheet area, loads after rest.js): movement / attacks left, New turn, feature buttons (`FEATURES`). Sets `--turnbar` (its height: main's padding and the tray sit above it). See "Turn bar and spells on you". |
 | app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations. |
 | app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. Also a new character's level 1 (`L.first`). See "Level up" below. |
 | app/maker.js | the sheet maker: "…or create a new sheet" (#newSheet, under the drop area) -> New character window (Sheet / Class / Background / Species / Abilities / Equipment / Details / Review) -> opens a blank sheet, writes it, then `levelUp.start({ key, target, picks })`. See "Sheet maker" below. |
@@ -43,7 +45,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). Our own scrollbars (user, 2026-10-29: the default looked out of place): global `::-webkit-scrollbar` rules (dark red thumb, gold edge, wider on hover, gold while dragged; a brown one inside `.page`), Firefox gets `scrollbar-color` via `@supports not selector(::-webkit-scrollbar)`. Never set `scrollbar-width`/`scrollbar-color` elsewhere (only `none`): in Chromium 121+ either one switches the custom ones off for that box. Pseudo-element rules can't be nested (`&` can't stand for one). Search boxes' × is restyled too. |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (603 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (790 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -64,18 +66,31 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   setMany([[field, value]...]) (writes all, then one refresh), weaponRows(), dmMark ('[DM allowed]') }`. `window.openPdf(file)` opens a PDF (resolves when loaded).
 - `window.levelUp.start({ key, target, picks, background })` (levelup.js; background = the maker's custom one, read via `bgData()`), `window.maker = { open, state }` (maker.js), `window.aboutCard` (dialog.js, see Files).
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
-  `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects], extraPages,
+  `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects],
+  spellsOn: [{ name, by, pick, mine }] (spells on you; key deleted when empty), extraPages,
   concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
   hitDiceSpent: {die: n}, beyondIgnored: [beyond ids answered "Ignore"] }`. Empty maps are deleted, not left as {}.
 - `window.resources` (rest.js) = `{ slots() -> [{level,total,used,left}], slotsLeft(l), slotTotal(l), useSlot(l), restoreSlot(l) (false when
   nothing to do), list() -> class features [{id,name,max,used,left,back,note}], setUsed(id, n), hitDice() -> {dice:[{die,total,spent,left}], spent, box},
-  view(), slotStrip(), openRest('short'|'long') }`. Every change goes through sheet.transaction, then fires `resources-change`.
+  view(), slotStrip(), openRest('short'|'long'), actions(id) -> [button names], action(id, name) -> {name, time, text, cost, resource,
+  left, max}, use(id, name) (as a click on that button) }`.
+  Every change goes through sheet.transaction, then fires `resources-change`. list() rows also carry `lvl` and `row` (class table).
 - `window.pdfHooks` — `async (doc, PDFLib) => pagesAdded`; appended pages are hidden on reopen (`extraPages`) and rebuilt on download.
-- `window.effects` = `{ forRoll({kind,ability,skill,arms}), speed(base), active(), register(provider), changed(), conditions,
+- `window.effects` = `{ forRoll({kind,ability,skill,arms,weapon}) -> {mod, parts, dice [{name,n,d,sign,type}], adv, dis, autoFail, notes},
+  speed(base), ac(base), attacks() -> {base, value, by}, active(), register(provider), changed(), conditions, spells (SPELLS_ON),
   concentration() -> {name, slot, duration} | null, concentrate(name|null, slot), interrupt(doing, why, endLabel) -> 'end'|'keep'|null|'none',
-  askEnd(title, why) }`. `sheetState.concentration` is saved in the PDF.
-  Effect rules can target a `skill` (e.g. Stealth); the roller passes `skill` for skill checks.
-- `window.roller.save(ability, title)`, `window.marble = { parts, setScore, setMode, applySpread, clearAll }`,
+  askEnd(title, why), spellOn(name), putOn(name, {by, pick, mine}), castOnSelf(name) (roller's "It's on me too"),
+  states (STATES), hasState(name), setState(name, on) (also conditions by name: Prone), startTurn() (ends the `turn` states),
+  rolled('attack') (ends the `once: 'attack'` states: Steady Aim) }`.
+- `window.turn` (turn.js) = `{ now() -> {speed (this turn's), base (after effects), speedBy, moveTotal, moveLeft, moved, dashes (all),
+  charger, step (what 5 ft costs), perAction, by, adds {name: attacks}, dashFrom {name: dashes}, feet {name: ft}, on [switches],
+  attacks, attacksLeft}, newTurn(), attacked(n = 1), add({name, attacks, dashes, feet ('half' = half the Speed), undo, id}) -> {feet, id}
+  (negative = take back; `id` = the turn it was added in, an older one is ignored), features (FEATURES) }`.
+  `sheetState.concentration` is saved in the PDF. Effect rules can target a `skill` (e.g. Stealth); the roller passes
+  `skill` for skill checks, `weapon: true` for weapon / Unarmed Strike attack and damage rolls, `spell: true` for spell
+  attack rolls (rule keys `weapon` / `spell` limit a rule to those).
+- `window.roller = { save(ability, title, purpose, bonus) -> log entry, log(entry) -> element, rollDamage(parts) }`,
+  `window.marble = { parts, setScore, setMode, applySpread, clearAll }`,
   `window.setStat(key, v)`, `window.getField(name)`.
 - `window.marble.hourPasses()` (the page's "An hour passes" button).
 - Events on `document`: `character-change`, `sheet-loaded`, `effects-change`, `resources-change` (rest.js), `sheet-state-change`
@@ -117,10 +132,22 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 ## Subclasses (script.js subclassOf, levelup.js) — decisions
 - User (2026-10-28): every class's subclasses beyond the free rules, facts from wikidot ("sufficient"); the Artificer;
   and the Blood Hunter from the D&D Beyond link (friends asked). Official books only (PHB, HoF, Ravenloft, Arcana
-  Unleashed, Drops); no UA. Exception (user asked, 2026-10-30): the Divine Soul sorcerer (Xanathar's, 2014): its level 1
-  features come at Sorcerer 3 (the 2024 PHB's rule for older subclasses); 2014 "spells known" read as prepared spells;
-  Divine Magic = `spellLists: ['Cleric']` (levelup.js spellPlan adds them to the lists, lead line names why) + the affinity
-  as an option with alwaysPrepared; Favored by the Gods (short) and Unearthly Recovery (18, long) are Rest tab rows. Blood Hunter = Mercer's 2020 version as on that page (2014 rules) kept as written: its four
+  Unleashed, Drops); no UA. Then (user, 2026-10-30/31): the Divine Soul, then "more subclasses, you can find them on dnd
+  beyond, details from any trusted source": every subclass in the contents of D&D Beyond's official source pages without
+  a 2024 version (subclasses-2014.js). Left out: what a 2024 book reprinted or updated (Totem Warrior = Wild Heart,
+  Shadow Magic, Bladesinging, Purple Dragon Knight = Banneret, Arcana Domain, College of Spirits, The Undead, Way of
+  Mercy ...: the 2024 PHB says the newer one replaces it), Plane Shift domains (not on D&D Beyond), UA, and the
+  third-party books D&D Beyond sells (Exploring Eberron 2024, Grim Hollow, Tal'Dorei Reborn, Griffon's Saddlebag ...: no
+  free trusted source; ask the user before adding them as names only). 2014 rules as the 2024 PHB allows: features below
+  level 3 come at 3 (domain spells of Cleric 1 + 3 all at 3); a Cleric domain's level 8 Divine Strike / Potent
+  Spellcasting is left out (the 2024 Blessed Strikes replaces it; its `legacy` note names the old damage type); "spells
+  known that don't count" = always prepared; ki = Focus Points, ki save DC = 8 + WIS + PB; Warlock "Expanded Spell List"
+  = `expanded` (offered by the spell picks, cantrips/prepared/swaps/Mystic Arcanum, incl. name-only ones; not prepared);
+  "Bonus Proficiency" and "Expanded Spell List" are SHARED_FEATURES. Divine Magic = `spellLists: ['Cleric']`. Feature
+  texts keep spell names out unless the feature grants or casts the spell (findSpells would count them: e.g. Genie
+  kinds say "five fire spells"), and feat names out (look-alikes added to `unless`: Durable Magic, Aura of the
+  Sentinel, Ferocious Charger, Resilient Sphere (the spell!), Spectral/Supernatural Defense); 'Sanctuary' is now
+  AMBIGUOUS (Twilight Sanctuary, Sanctuary Vessel). Scans for both were run (scratchpad). Blood Hunter = Mercer's 2020 version as on that page (2014 rules) kept as written: its four
   Fighting Styles map to the 2024 feats of those names (`choice.only`), ASI at 19 is a general feat pick, no Weapon
   Mastery, Hemocraft modifier taken as INT (WIS only with the DM's OK, not modelled), its 2014 equipment as two packages
   with no gold (maker shows no "0 GP").
@@ -144,7 +171,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   subclass's spellcasting (cantrips by level, prepared[20], slots[20] or pact[20]); spells step, slots, swaps and the
   first-caster spellcasting boxes all go through it. Arcane Trickster: Mage Hand comes via `spells`, so 2 cantrips to pick.
 - Roller riders (`riders` on a subclass): toggles on the attack card adding a damage part (dice by level or 'martialArts',
-  + ability mod, + part of the class level, + flat by level; `on` = on by default; melee/unarmed only). Blood Hunter rites
+  + ability mod, + part of the class level, + flat by level, + PB with `pb`; `on` = on by default; melee/unarmed only). Blood Hunter rites
   are read from the sheet text ("Rite of the Flame" ...; Rite of the Dawn comes with the Ghostslayer): one toggle each,
   hemocraft die of the type, Brand of Sundering +1 die (Ghostslayer 11), "Against Undead" with Dawn, Marked +1 die when the
   sheet names Blood Curse of the Marked. Lycan hybrid form: rider +1/2/3 melee damage, unarmed die d6/d8, +1/2/3 to hit (7+).
@@ -181,7 +208,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   keep native undo). History is cleared after a load (auto-filled boxes aren't undoable). 200 steps max.
 - Spells on the sheet (`findSpells`): a box holding just a spell's name, species/lineage spells by character level, and
   spell names anywhere in the text (`SPELL_RES`), except: `AMBIGUOUS` names (everyday rules words: Light, Shield ...,
-  Darkvision the sense, Aid in "Land's Aid", Jump, Divination the school, Creation, Bane), a name inside a longer spell
+  Darkvision the sense, Aid in "Land's Aid", Jump, Divination the school, Creation, Bane, Sanctuary), a name inside a longer spell
   name (Mass Cure Wounds is not Cure Wounds), and text not reached yet (`reachedText`: the rest of a sentence after
   "at/from (character|<Class>) level N" or "; N:" counts once that level is reached; user found a Tabaxi 1 could cast
   Darkvision, and a Life Cleric 3's feature line made its level 5-9 domain spells castable).
@@ -220,6 +247,8 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   disagreed on 11 values (Trident damage, Mace/Pike weight, Longbow and Hand Crossbow cost ...); D&D Beyond won every time.
   That SRD data also listed Longswords for Rogues (not 2024) - fixed.
 - Spell roll data fixes vs the source: Conjure Animals is a DEX save, Weird has no half damage, "Thunderwavea" typo.
+  Parser slips fixed 2026-10-31: Knock, Moonbeam, Fly and Greater Invisibility had their first paragraph inside
+  `duration` (moved into `text`), Freedom of Movement's text began with "kj**Duration:** 1 hour".
   Spells without damage/healing only carry their attack type / save. A few feature summaries (Hamstring Blow -15 ft, Horde
   Breaker, Divine Smite upcasting, Obscure cost, Trip/Withdraw) come from knowledge of the 2024 rules (source text cut off).
 - More feats/species (user's choice, 2026-10-03: PHB + the four 2024 books, full automation, public on GitHub). The PHB
@@ -233,7 +262,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   writes; sweep.test checks none of it is flagged). Species match by name or `aliases`; the longest match wins.
 - Basic Rules scope: 1 subclass per class, 4 backgrounds, 9 species, 17 feats. The PHB adds feats, the Aasimar and 12 backgrounds.
   species-more.js adds 62 official species with their rules (wikidot) and 100 names-only ones.
-  subclasses.js adds every other official 2024 subclass and the Divine Soul (72 for the 12 classes; 82 with the Artificer's 6 and the Blood Hunter's 4).
+  subclasses.js adds every other official 2024 subclass (71 for the 12 classes), subclasses-2014.js the 55 of the older books (126; 136 with the Artificer's 6 and the Blood Hunter's 4).
 
 ## Rules decisions (keep consistent)
 - 2024 rules. Adv + Dis cancel. Crits double dice only. Nat 1 attack = miss, no damage. Checks/saves never crit.
@@ -277,6 +306,58 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   spreads into an unmarbled neighbour after the hour; the normal verdict / "Apply?" flow follows). One transaction (Undo).
   One hour per click; rests don't move the marble (their window says so).
 
+## Turn bar and spells on you (turn.js, effects.js) — decisions
+- User (2026-10-31): "a live speed counter and attacks left per turn with a reset button for all", and in the effects a
+  list of the spells on you (Haste or Longstrider from someone else). Then (same day): "more compatible with things like
+  feline agility", move "this turn" somewhere else "so it looks much better and cleaner", and buttons for such features
+  "wherever applicable". The tracker left the Effects tray for a bar docked at the bottom of the sheet area (full width up
+  to the roller; header-like, red top border), with two cards (Move, Attacks) that stack when there isn't room; ▾ (next
+  to "Turn") folds it to the counters + Dash (localStorage 'turnbar-folded'). Only with a sheet open. Dash group (user,
+  2026-11-01): − | Dash ×N | +, the − always there and greyed out with no plain Dash to take back, the + always lit and
+  the only way to add one; the middle is a counter (a span, not a button) of ALL Dashes this turn (features' too: their
+  own buttons take those back), min-width + tabular numbers so ×0 ... ×99 keep the width (user disliked the width change).
+  The bar's spacing was tightened so a Fighter 5 (Dash group, Difficult terrain | Action Surge) fits one row at 1300 px
+  with the roller open.
+- Move (not saved, reset on load): this turn's Speed = `effects.speed(sheet Speed + Ambusher's Leap 10)` (so Haste etc.
+  apply), × 2 with Feline Agility (its own doubling on top of Haste's), 0 with Steady Aim (not with "Roving Aim" on the
+  sheet). Total = Speed + Dashes × (Speed + 10 with Charger, 0 if Speed is 0) + feet from features. −/+ step = what 5 ft
+  costs: +5 in Difficult terrain (the switch; none after a Dash with Speedy or with Freedom of Movement on you), +5 while
+  Prone (crawling; 2024: 2 extra in Difficult Terrain); the button reads "−10". "Stand up −N" while Prone (own condition):
+  half the Speed, then removes Prone (asks when there isn't enough left). Feline Agility: dimmed once used; "New turn"
+  after a turn with 0 ft moved (and it not used) brings it back; pressing it while used asks "Use anyway"; not saved.
+- Feature buttons (`FEATURES`, gold pills, shown only when you have the feature; pressed again = taken back): `dash`
+  (Cunning Action 2+, Expeditious Retreat while on you / concentrating, Battlerager Charge 10+ while Raging), `attack` +1
+  (Martial Arts, Light weapon = 2 Light weapon rows or 1 + Dual Wielder, Pole Strike, Hew, Horde Breaker (sheet text),
+  Soulknife second blade, Goring Rush, Charge), `on` switches (Feline Agility, Ambusher's Leap, Steady Aim (also sets the
+  'Steady Aim' state: Advantage, used up by the next weapon or spell attack roll via `effects.rolled`; asks if you moved),
+  Difficult terrain), `use` = a Rest tab button (`resources.use`): Step of the Wind, Adrenaline Rush, Rabbit Hop, Large
+  Form (`state`: pressed again ends it, no refund), Action Surge, Flurry of Blows, War Priest; badge = uses left, title =
+  the action's text (`resources.action`). Pressed again, a used one runs rest.js's own Undo (passed in `turn.add`'s
+  `undo`): uses, state and turn all back, the log line says "(undone)". rest.js ACTIONS add `feet`: Rage at Barbarian 7
+  (Instinctive Pounce, half Speed), Second Wind at Fighter 5 (Tactical Shift), Rabbit Hop (5 × PB); species rows
+  ('sp:Adrenaline Rush' Dash + Temp HP = PB, 'sp:Rabbit Hop', 'sp:Large Form' state) now have buttons.
+- Typed movement: the number box sets feet moved = total − typed. Attacks = per Attack action
+  (`attacks()`: max over classes of the table's `attacks` / an "Extra Attack" class or subclass feature at its level, a
+  Warlock 5+ with "Thirsting Blade" on the sheet (12+ "Devouring Blade" = 3); not stacking) + effect `attacks.add`
+  (Haste +1), capped by `attacks.max` (Slow 1), + the "+1" button ("−1" next to it while any are added). Pips: gold diamonds = left; click to use / give back.
+  roller.js rollAttack counts each NEW weapon attack (not "Again", "Damage only", Cleave's extra attack, spell attacks);
+  it never blocks a roll past 0. "New turn" resets moved, Dashes, used and added attacks, the switches and what features
+  added, and calls `effects.startTurn()`.
+- Spells on you: `SPELLS_ON` (~55 spells; summaries in our own words from the SRD 5.2 texts in spells.js, Crusader's
+  Mantle / Compelled Duel from the 2024 PHB) with rules for speed (double / half / add / Freedom of Movement `free`: spell
+  reductions dropped), AC (`add`, Mage Armor `base` 13 + DEX if higher, Barkskin `min`), attacks, d20 dice (Bless / Bane /
+  Guidance, `sign`), weapon damage dice (Enlarge/Reduce, Crusader's Mantle), conditions (Hold Person = Paralyzed's rules
+  + `incap`: asks about concentration like the conditions). `pick` = the caster's choice (ability / skill / list). Any
+  other spell or typed name = a reminder (violet star, "No automatic effect"). The same spell again replaces the old one
+  (2024: the same spell's effects don't combine). `mine` = you cast it: a concentration spell then lasts only while you
+  concentrate on it (`concentrate()` prunes it; the tray's tick box or the roller's "It's on me too" after casting a buff
+  sets it; a spell with a pick opens the form filled in). Bless / Guidance on you hide the roller's own Bless / Guidance
+  chips (no double die). Spell entries' text is clamped to 2 lines; a click unfolds it.
+- Speed order (changed for Haste): plain additions first, then halved / doubled (once each), then the additions that sit
+  in a halving rule (Killing Marble legs "halved and −10 ft" keep their old numbers), 0 wins. Haste + Longstrider = 80.
+- The tray's footer shows "AC x → y (names)" only when the AC actually changes. Damage parts with `sign: -1` subtract
+  (rollDamage, partsText "− 1d4", damageView).
+
 ## Beyond the rules (script.js featureClaims/featWhy, beyond.js) — decisions
 - User (2026-10-07): don't let a sheet claim what the character can't possibly have (any class, not only Fighter); the
   DM may have given it, so ask; if kept, it must be visible so the DM can spot cheating.
@@ -309,14 +390,47 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   checkboxes (ticked in order) + `sheetState.slotsUsed` overflow, else sheetState only. The user asked for this
   (2026-10-04: typing expended slots on the sheet must be read and written).
 - Class features: `RESOURCES` in rest.js (id, class, from level, max from the class table row, back: short / short1 (one
-  back on a Short Rest) / long). Includes Lucky's Luck Points (PB). Nothing is spent automatically (Rage toggle, Second Wind
-  etc. don't touch the counters: user rule, never change state on their behalf).
+  back on a Short Rest) / long). Includes Lucky's Luck Points (PB), Tireless (Ranger 10), Wholeness of Body (Open Hand 6).
+  Nothing is spent automatically (the Rage chip, a rider toggle etc. don't touch the counters: user rule, never change
+  state on their behalf); spending is always a click of the user's (pips, the buttons below, the log's "use" lines).
   Subclass uses have `sub: 'Battle Master'` (shown only when the sheet names that subclass, from the subclass level):
   Superiority Dice, Psionic Energy Dice (Psi Warrior, Soulknife), Arcane Shot, Despairing Strike Dice, Warding Flare,
   Healing Light, Bladesong, Portent rolls ... Artificer (Tinker's Magic, Flash of Genius) and Blood Hunter (Blood
   Maledict incl. the Ghostslayer's +1, Brand of Castigation) are class rows. Species traits with `uses` follow them
   (id 'sp:<trait>', from the trait's character level). Pact slots on a Short Rest use `calc.pactOf`
   (Warlock and/or Profane Soul).
+- Spending uses (user, 2026-10-31: "allow the monk to use his points to do shi and also track attacks in the attack
+  counter, do this for all classes applicable"; "maybe rest or spells" -> the Rest tab): `ACTIONS[resource id]` in rest.js
+  (schema in its comment) = small gold buttons under each feature row (cost badge; dimmed when short). A click: asks what
+  it needs (options via window.ask buttons; Lay On Hands = a number box, default the HP you're missing; slots for Font of
+  Inspiration / Font of Magic; Indomitable = the ability) -> not enough uses = ask, "Use anyway" keeps the count -> asks
+  about concentration (Rage `ends`, `cast` Hunter's Mark / Darkness) -> ONE transaction (uses, `refill`, slots, `state`,
+  concentration) -> `turn.add` (attacks: Flurry 2/3, Action Surge = per Attack action, War Priest 1; dashes:
+  Step of the Wind, Action Surge "Dash", Adrenaline Rush; feet, see "Turn bar") -> a log entry (title + pick, tag "Focus Points −1 · Bonus Action", rolls, save
+  DC, text, a line "…: 1 used, 9 of 10 left. +3 attacks this turn." with Undo = everything back incl. the turn).
+  Healing / Temp HP never written by themselves: `hpLine` buttons "Heal yourself: HP 50 → 64" (capped at max) / "Set your
+  Temp HP to N" (not when you have as many), each with Undo. "Again" rerolls the dice without spending (no Again without
+  dice). Indomitable rolls `roller.save(..., bonus = Fighter level)` and puts the line on that entry. Covered: Rage,
+  Persistent Rage, Bardic Inspiration (+Lore's Cutting Words / Peerless Skill, Font of Inspiration's slot), Channel
+  Divinity (Divine Spark, Turn Undead + Sear Undead, Life / Light / Trickery / War options; Paladin: Divine Sense,
+  Devotion / Glory / Ancients / Vengeance), Wild Shape (Temp HP = level, Moon x3), Wild Companion, Land's Aid, Starry
+  Form, Wrath of the Sea, Second Wind (+ Tactical Shift note), Tactical Mind, Action Surge, Indomitable, the Monk's Focus
+  options (incl. Deflect Attacks free, Redirect, Superior Defense, Mercy / Shadow / Elements / Open Hand), Uncanny
+  Metabolism, Wholeness of Body, Lay On Hands (+ Cure Poisoned 5), Favored Enemy, Tireless, Innate Sorcery (+ Sorcery
+  Incarnate 2 SP), Metamagic (the options the sheet names, else all), Font of Magic both ways (a created slot only
+  restores a spent one; above the maximum it asks and spends the points only), Magical Cunning (half the Pact slots,
+  round up), War Priest, Battle Master maneuvers (the sheet's, DC 8 + STR/DEX + PB when the text says save), Psi Warrior /
+  Soulknife die uses, Samurai Fighting Spirit, Bladesong, Healing Light / Warrior of the Gods / Balm (how many dice).
+  After an attack (roller.js): a toggled rider that spends a feature (`RIDER_USES`: Superiority Die, Psionic Strike,
+  Despairing Strike, Hand of Harm, Deft Strike, Dreadful Strike, Psychic Blades, Touch of Death, Arcane Jolt) gets a
+  `useLine` button; a Monk 5+ hit with an Unarmed Strike or Monk weapon (Simple melee, Martial melee Light) gets
+  "Stunning Strike (1 of N Focus Points)" -> DC 8 + WIS + PB text. Not on "Again", not on a nat 1.
+  States (effects.js `STATES`, own effects by name, `source: 'feature'`, a diamond dot): Raging (Adv STR checks/saves; the
+  attack cards' Rage chip defaults on while it's there), Dodging and Fighting Spirit (`turn: true`: "New turn" removes
+  them), Innate Sorcery (rule `spell: true` Adv), Sacred Weapon (+CHA weapon attacks), Peerless Athlete, Bladesong (AC
+  +INT, +10 ft, Acrobatics Adv), Steady Aim (`turn`, `once: 'attack'`), Large Form (Adv STR checks, +10 ft), and reminders
+  (Wild Shape, Starry Form, Superior Defense, Vow of Enmity, Elemental Attunement). They can be typed in the tray's "+ Add"
+  too (datalist "Class feature").
 - Hit Point Dice: total from class levels (else the Hit Dice text); spent in the official sheet's box (Text18) + per-die map
   in sheetState. Classic sheet (hitDiceTotal "HDTotal" AND hitDice "HD", no spent box): HD = the dice LEFT ("3d8",
   "3d8 + 2d6" or a plain count, written back in the same style; all spent = "0d8"), as levelup.js already treats it;
@@ -438,11 +552,29 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 
 ## Testing
 - The Bash tool's sandbox stops headless Edge (empty output): run the tests from the PowerShell tool.
-- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|subsweep|subclasses|species|speciessweep|heal|feats|concentration|rest|maker|beyond|ui`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
+- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|subsweep|subclasses|species|speciessweep|heal|feats|concentration|rest|maker|beyond|ui|turn|actions`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
   XHR (works with --allow-file-access-from-files), fills a Wizard 4 and levels it.
 - concentration.test.js: casting/switching/Undo, conditions, tray form, damage saves (incl. Again), 0 HP, Rage, marble head 10.
+  turn.test.js: the bar (not in the tray, --turnbar), movement (−5/+5, typed, Dash and taking it back, floor 0), attacks (Fighter 5, roller counts, Again / Damage only don't,
+  pips, +1 / −1, New turn, Thirsting Blade, Valor Bard, no Speed box), feature buttons (Action Surge from the bar and taken
+  back, a Tabaxi Rogue's Feline Agility / Cunning Action / its recharge and question, Steady Aim's Speed 0 + Advantage used
+  up + question, Difficult terrain, crawling, Stand up, Charger + Speedy, two Light weapons, Ambusher's Leap, Martial Arts,
+  Flurry / Step of the Wind from the bar, Instinctive Pounce, Adrenaline Rush, Large Form, Expeditious Retreat, folding),
+  spells on you (Haste / Longstrider / Slow / Freedom of
+  Movement numbers, AC line, DEX save Advantage, replace + Undo/Redo, Bless / Bane dice and hidden chips, Guidance's skill,
+  Reduce damage, Hold Person asking about concentration, reminders, the Effect tab's link, "I cast it on myself",
+  "It's on me too" incl. a spell with a pick). Log lines from "It's on me too" are `.self-line` (tests find `.conc-line`).
+  actions.test.js: the Rest tab's feature buttons: a Monk 10 (button list and badges, Flurry +3 attacks and its Undo, Step
+  of the Wind's Dash, Patient Defense's Dodging + Temp HP button, Advantage on DEX saves, New turn ending Dodging,
+  Stunning Strike from the attack log, "Use anyway", Uncanny Metabolism + Heal yourself, sheet Undo/Redo), Fighter 9
+  (Second Wind, Action Surge's pick, Indomitable's save +9, Battle Master maneuver from the sheet, Superiority Die rider
+  line), Barbarian Rage (concentration question, Raging, the Rage chip on, STR Advantage, Undo), Lay On Hands (amount),
+  Sorcerer (Metamagic, both Font of Magic ways, a slot above the maximum, Innate Sorcery on spell attacks only), Cleric
+  (Divine Spark, Turn Undead + Sear Undead, Again without spending), Ranger (Hunter's Mark concentration + Undo). In a full
+  run species.test.js once stopped at 36 of 42, and subclasses.test.js once at 25 of 75 (headless time budget under load;
+  alone they pass, and the next full run did too): run it again alone.
   rest.test.js: slot use from the log / pips / "Cast anyway", Rest tab, Short Rest (Hit Point Dice, Arcane Recovery), Long
   Rest (slots, Exhaustion, concentration), Undo/Redo of rests and of a stat change (Ctrl+Z/Y), a later tray change as its
   own step, Fighter features, unsaved dot, classic "Slots Expended" and Hit Dice boxes read/written, "1d6/8 -1" damage. roller.test.js also covers Weapon Mastery (Graze, Vex, Cleave, mastered list);
@@ -466,9 +598,12 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   math, "Blood Hunter 3 (Ghostslayer)" next to a Hunter Ranger, Blood Hunter 2 (four styles, rites greyed below 14, the
   rite in the roller, Blood Maledict resource), Profane Soul spells and pact slot, Vestige Spells picked and read back,
   Artificer level 1 and plans, Knowledge Domain Expertise, a Wizard savant pick, Psi Warrior rider and dice, a Blood
-  Hunter level 1. Divine Soul (Cleric list, Law -> Bless, Favored by the Gods). subsweep.test.js: every non-free subclass (68) picked at its level, then levelled through every level
+  Hunter level 1. Divine Soul (Cleric list, Law -> Bless, Favored by the Gods); 2014 subclasses: short names (Kensei, Hexblade,
+  Chronurgy, Wild Magic ...), the ▾ note, a Swords Bard's Dueling within the rules, Hexblade expanded spells (name-only
+  Branding Smite written) and curse rider, Genie kind spells picked and read back, Rune Knight runes, Reaper, Scout
+  Expertise, Storm Aura's keepText line. subsweep.test.js: every non-free subclass (122) picked at its level, then levelled through every level
   where it gains something (all levels for casters/savants), every pick filled; no errors, reads back, nothing beyond
-  the rules (~40 s).
+  the rules (~70 s).
 - species.test.js: species data counts, spell names in trait/feature text (Darkvision, later levels, longer names), the maker's species step (cards, search by name/book, names-only warning, Tortle /
   Warforged AC), a Githyanki Fighter's first level (ability chips, trait lines, Mage Hand, Jump at 3), Kobold Legacy's
   `if` parts, Hare-Trigger initiative, Tabaxi claws, Bugbear/Giff/Goliath switches, Half-Orc crit, Rest tab species uses,
@@ -517,6 +652,11 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   Lycan hybrid AC/resistances aren't effects; the Crimson Rite's HP cost isn't rolled; Arcane Shot / maneuver effects
   are text; the Profane Soul's "spells known" are counted as prepared; Mystic Focus / Arcane Recovery-like slot
   trades aren't offered on rests; Hemocraft = INT (WIS variant not modelled); Replicate Magic Item's items aren't tracked.
+  2014 subclasses: companions/summons (Drake, Wildfire Spirit, Dancing Item, Echo, Specter, Tentacle) and natural
+  weapons (Path of the Beast, Radiant Sun Bolt, Battlerager spikes) have no attack cards; CHA weapon attacks (Hex
+  Warrior), INT/CHA/PB to Initiative (Tactical Wit, Temporal Awareness, Rakish Audacity, Aura of the Sentinel), the
+  Hexblade's 19-20 crit and Elegant Courtier's choice by existing save aren't applied; War Magic's Power Surges aren't a
+  Rest tab row (they reset to 1, not to the maximum); EGW's dunamancy spells aren't in the data.
 - The four other 2024 books' feats/species are names only (`brief`). If the user pastes a feat's text, fill in its
   summary/choices/automation and drop `brief`.
 - Feat automation not done: Lucky,
@@ -529,9 +669,20 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   that need a state (Shifter's shift, Duskling's Inner Magic, Simic Hybrid's Carapace AC, Shell Defense) aren't effects;
   the Dhampir's bite (CON) and Longtooth aren't attack cards; the Verdan's size box isn't changed at level 5; Feral
   Tiefling variants aren't options.
-- Rests/resources not done: free-rules subclass uses (Wholeness of Body,
-  Natural Recovery), Second Wind / Lay On Hands rolls from the counters, Magical Cunning's slot recovery, Relentless Rage DC.
+- Rests/resources not done: Natural Recovery (Land), Relentless Rage DC. Feature buttons, not done: Innate Sorcery's +1
+  spell save DC isn't shown on spell cards; Lunar Boons' cheaper Metamagic; a created slot above the maximum isn't tracked;
+  Rage / Dodging durations aren't timed (× in the tray ends them; New turn ends only the `turn` ones); the Wild Shape
+  form's own stats; options of other subclass resources (Arcane Shot kinds, Hexblade's Curse, Blood Hunter curses and
+  amplifying, Rune Knight runes, Echo Knight ...) are pips only; species uses other than Adrenaline Rush, Rabbit Hop and
+  Large Form have no buttons (Breath Weapon, Healing Hands, Celestial Revelation ...).
 - Sheet maker, not done: our own sheet design (user: later); brief species' size/speed; Bard's three
   instruments aren't tied to the equipment instrument; starting magic items for higher levels are a note only.
+- Turn bar / spells on you, not done: Action / Bonus Action / Reaction pips (two Bonus Action buttons can both be on);
+  teleports (Misty Step, Fey Step, Shadow Step) and Withdraw (Cunning Strike) don't touch Move; Wild Shape's Speed isn't
+  used (type it); the Shifter's Swiftstride, Fly / climb / swim speeds; "New turn" doesn't end Shield or
+  Ray of Frost (they say "until the start of your next turn") or give Heroism's Temp HP; Fly / Spider Climb / Freedom of
+  Movement's other speeds are text only (Move counts the walking Speed); Aid / Heroes' Feast HP aren't written; Mage
+  Armor ignores a Shield already in the sheet's AC; Resistance / Protection from Energy / Stoneskin aren't applied to
+  damage taken; Haste's lethargy when it ends isn't added.
 - Ideas suggested to the user and not built yet: Damage/Heal/Temp HP buttons, death saves roller, Heroic Inspiration and
   Lucky rerolls in the log, copy a roll as text, roller keyboard shortcuts, asking before loading another PDF over unsaved changes.

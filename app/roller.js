@@ -35,27 +35,30 @@ const opt = key => state.opts[key] ||= {};
 // sources cancel each other out, as the rules say.
 // more: other sources of Advantage (War Caster on a concentration save)
 function withEffects(roll, chosen, more = []) {
-  const fx = window.effects ? window.effects.forRoll(roll) : { mod: 0, parts: [], adv: [], dis: [], autoFail: [], notes: [] };
+  const fx = window.effects ? window.effects.forRoll(roll) : { mod: 0, parts: [], dice: [], adv: [], dis: [], autoFail: [], notes: [] };
   const adv = chosen === 'adv' || fx.adv.length > 0 || more.length > 0, dis = chosen === 'dis' || fx.dis.length > 0;
   const mode = adv && dis ? null : adv ? 'adv' : dis ? 'dis' : null, why = [...new Set([...fx.adv, ...more, ...fx.dis])];
   const tag = (adv && dis ? 'Advantage and Disadvantage cancel' : MODES[mode] || '') + (why.length ? ` (${why.join(', ')})` : '');
   return { ...fx, mode, tag: tag || null };
 }
 
-// A D20 Test. critOn is only given for attack rolls (checks and saves don't crit). fx: from withEffects().
+// A D20 Test. critOn is only given for attack rolls (checks and saves don't crit). fx: from withEffects() (its dice: Bless,
+// Bane, Guidance on you; sign -1 subtracts them).
 function d20Test(mode, bonus, extraDice = [], critOn = null, fx = null) {
   if (fx) mode = fx.mode;
   const rolls = mode ? [rnd(20), rnd(20)] : [rnd(20)];
   const kept = mode === 'adv' ? (rolls[1] > rolls[0] ? 1 : 0) : mode === 'dis' ? (rolls[1] < rolls[0] ? 1 : 0) : 0;
   const nat = rolls[kept];
-  const extra = extraDice.map(x => ({ ...x, rolls: Array.from({ length: x.n }, () => rnd(x.d)) }));
-  return { mode, rolls, kept, nat, bonus, extra, total: nat + bonus + (fx?.mod || 0) + sum(extra.flatMap(x => x.rolls)),
+  const extra = [...extraDice, ...(fx?.dice || []).map(x => ({ label: x.name, n: x.n, d: x.d, sign: x.sign }))]
+    .map(x => ({ ...x, rolls: Array.from({ length: x.n }, () => rnd(x.d)) }));
+  return { mode, rolls, kept, nat, bonus, extra, total: nat + bonus + (fx?.mod || 0) + sum(extra.map(x => (x.sign || 1) * sum(x.rolls))),
     fxParts: fx?.parts || [], autoFail: fx?.autoFail || [], crit: critOn != null && nat >= critOn, fumble: critOn != null && nat === 1 };
 }
 
 // parts: [{ label, n, d, flat, type, gwf (1s and 2s count as 3), savage (roll twice, keep higher), explode (max extra dice),
 //          max (every die counts as its highest face: Supreme Healing), critExtra (more dice on a crit: Piercer),
-//          reroll1 (a 1 is rolled again: Tavern Brawler), min2 (1s count as 2: Elemental Adept) }]
+//          reroll1 (a 1 is rolled again: Tavern Brawler), min2 (1s count as 2: Elemental Adept), sign (-1: the dice are
+//          taken off: Reduce, Ray of Enfeeblement) }]
 function rollDamage(parts, crit = false) {
   const out = parts.map(p => {
     const n = p.n * (crit ? 2 : 1) + (crit && p.n && p.critExtra ? p.critExtra : 0);
@@ -73,7 +76,7 @@ function rollDamage(parts, crit = false) {
     for (let i = 0, extra = 0; p.explode && i < dice.length && extra < p.explode; i++) {
       if (dice[i].v === p.d) { const v = rnd(p.d); dice.push({ v, d: p.d, shown: v, boom: true }); extra++; }
     }
-    return { ...p, dice, alt, total: sum(dice.map(x => x.shown)) + p.flat };
+    return { ...p, dice, alt, total: (p.sign || 1) * sum(dice.map(x => x.shown)) + p.flat };
   });
   return { parts: out, total: Math.max(0, sum(out.map(p => p.total))), crit }; // penalties can't push damage below 0
 }
@@ -131,7 +134,8 @@ function subRiders(w, melee) {
       if (c.level < (r.from || 3) || r.unarmed && !w?.unarmed || r.melee && !melee) continue;
       const die = r.dice === 'martialArts' ? '1d' + (lvlRow('monk')?.martialArtsDie || 6) : typeof r.dice === 'object' ? byLevel(r.dice, c.level) : r.dice;
       const p = die ? parseDice(die) : { n: 0, d: 0, flat: 0 };
-      p.flat += (r.mod ? C.mods?.[r.mod] ?? 0 : 0) + (r.level ? Math.floor(c.level * r.level) : 0) + (typeof r.flat === 'object' ? byLevel(r.flat, c.level) : r.flat || 0);
+      p.flat += (r.mod ? C.mods?.[r.mod] ?? 0 : 0) + (r.level ? Math.floor(c.level * r.level) : 0) + (typeof r.flat === 'object' ? byLevel(r.flat, c.level) : r.flat || 0) +
+        (r.pb ? C.profBonus || 2 : 0); // Hexblade's Curse, Genie's Wrath
       out.push({ id: 'rider:' + r.name, name: r.name, on: !!r.on, note: r.note, part: { label: r.name, ...p, type: r.type } });
     }
   }
@@ -211,7 +215,7 @@ function parseDamageText(text, fallbackType = '') {
 const parseHit = text => { const m = String(text ?? '').match(/^\s*([+-]?)\s*(\d+)/); return m ? (m[1] === '-' ? -1 : 1) * +m[2] : null; };
 // "1d8+4 slashing + 1d6 radiant +2 Rage" (flat extras show their name instead of the damage type)
 const partsText = parts => parts.map((p, i) => i && !p.n ? `${fmt(p.flat)} ${p.label || ''}`.trim()
-  : `${i ? '+ ' : ''}${diceText(p)}${p.type ? ' ' + p.type : ''}`).join(' ') || '—';
+  : `${i ? (p.sign < 0 ? '− ' : '+ ') : ''}${diceText(p)}${p.type ? ' ' + p.type : ''}`).join(' ') || '—';
 
 function attackItems() {
   const list = (C.weapons || []).filter(w => !w.spell).map(w => ({ key: 'row:' + w.name, name: w.name, weapon: w.weapon,
@@ -288,8 +292,8 @@ function attackSetup(item, o) {
   if (w && (['Quarterstaff', 'Spear'].includes(w.name) || heavy && w.props.includes('reach'))) note('Polearm Master', 'after the Attack action, a Bonus Action attack with the other end (1d4 Bludgeoning).');
   if (w?.unarmed) note('Tavern Brawler', 'once per turn a hit can also push the target 5 ft; 1s on the damage die are rolled again.');
   if (w && melee) note('Shield Master', `after a hit, bash with your Shield: STR save DC ${8 + (C.mods?.STR ?? 0) + pb} or pushed 5 ft or knocked Prone.`);
-  const rage = lvlRow('barbarian');
-  if (rage && ability === 'STR' && toggle('rage', `Rage +${rage.rageDamage}`)) extras.push({ label: 'Rage', n: 0, d: 0, flat: rage.rageDamage, type });
+  const rage = lvlRow('barbarian'), raging = o.rage ?? !!window.effects?.hasState('Raging'); // on while Raging is in the Effects tray
+  if (rage && ability === 'STR') { toggle('rage', `Rage +${rage.rageDamage}`, { on: raging }); if (raging) extras.push({ label: 'Rage', n: 0, d: 0, flat: rage.rageDamage, type }); }
   const rogue = lvlRow('rogue');
   if (rogue && w && (w.props.includes('finesse') || w.kind === 'ranged')) {
     const sa = parseDice(rogue.sneakAttack);
@@ -327,27 +331,42 @@ function attackSetup(item, o) {
   }
   if (w && ['Club', 'Quarterstaff'].includes(w.name) && knows('Shillelagh')) toggle('shillelagh', `Shillelagh (${sc.ability}, ${['d8', 'd10', 'd12', '2d6'][tier - 1]})`);
   if ((C.feats || []).includes('Savage Attacker')) toggle('savage', 'Savage Attacker');
-  if (toggle('bless', 'Bless +1d4')) testDice.push({ label: 'Bless', n: 1, d: 4 });
+  if (!onMe('Bless') && toggle('bless', 'Bless +1d4')) testDice.push({ label: 'Bless', n: 1, d: 4 }); // Bless on you: the effects add it
   toHit += parseInt(o.extraHit, 10) || 0;
   for (const p of parseDamageText(o.extraDmg, type) || []) extras.push({ label: 'Extra', ...p });
-  for (const p of window.effects?.forRoll({ kind: 'damage', ability, arms }).parts || []) extras.push({ label: p.name, n: 0, d: 0, flat: p.mod, type });
+  extras.push(...fxDamage({ kind: 'damage', ability, arms, weapon: !!w }, type));
   return { toHit, parts: [...parts, ...extras], testDice, toggles, ability, abilityMod, source, melee, w, arms, notes, mastery, riders, used };
 }
 
 const knownSpells = () => (C.spells || []).map(x => x.spell);
+// A spell on you (the Effects tray's "Spells on you")
+const onMe = name => !!window.effects?.spellOn(name);
+// Damage parts from effects: flat bonuses and dice (Enlarge +1d4, Crusader's Mantle, Ray of Enfeeblement −1d8)
+const fxDamage = (roll, type) => {
+  const fx = window.effects?.forRoll(roll) || { parts: [], dice: [] };
+  return [...fx.parts.map(p => ({ label: p.name, n: 0, d: 0, flat: p.mod, type })),
+    ...fx.dice.map(x => ({ label: x.name, n: x.n, d: x.d, flat: 0, type: x.type || type, sign: x.sign }))];
+};
 
 // ---- Rolling (each call adds a new entry to the log) ---------------------------------
 // again: a repeat from the log ("Again"), which uses no slot and no Vex of its own; vex: this roll has Vex's Advantage
 function rollAttack(item, mode, o = { ...opt(item.key) }, again = false, vex = !again && !!state.vex) {
   if (vex && !again) state.vex = null; // used up by this attack
-  const s = attackSetup(item, o), fx = withEffects({ kind: 'attack', ability: s.ability, arms: s.arms }, mode, vex ? ['Vex'] : []);
+  const s = attackSetup(item, o), fx = withEffects({ kind: 'attack', ability: s.ability, arms: s.arms, weapon: !!s.w }, mode, vex ? ['Vex'] : []);
   const test = d20Test(mode, s.toHit, s.testDice, C.critRange || 20, fx);
   const node = log({ title: item.name + (o.cleave ? ' (Cleave)' : ''), tag: ['Attack', fx.tag],
     lines: [{ test, damage: s.parts.length && !test.fumble ? rollDamage(s.parts, test.crit) : null }],
     notes: [...fx.notes, beyondLine(s.used)], extra: s.mastery ? [masteryNotes(s.mastery, s, test, again, item, o)] : [],
     again: m => rollAttack(item, m, o, true, vex), test: true, mode });
-  // a smite toggled on is a spell cast with a slot
+  // a smite toggled on is a spell cast with a slot; a rider that spends a feature's uses (Superiority Die ...) offers to
+  // spend them; a Monk's hit can be a Stunning Strike
   if (!again) for (const r of s.riders) if (castPerHit(r.spell)) slotLine(node, r.spell, r.slot, false);
+  if (!again) for (const t of s.toggles) { const u = RIDER_USES[t.id.replace(/^rider:/, '')]; if (u && (t.on ?? o[t.id])) useLine(node, ...u, t.id.slice(6)); }
+  if (!again && !test.fumble && stunning(s.w)) useLine(node, 'focus', 1, 'Stunning Strike',
+    `DC ${monkDC()} CON save: Stunned until the start of your next turn; on a success its Speed is halved and the next attack against it has Advantage.`);
+  // one of this turn's attacks (the turn bar); a repeat or Cleave's extra attack isn't. It uses up Steady Aim.
+  if (!again && !o.cleave) window.turn?.attacked();
+  if (!again) window.effects?.rolled('attack');
   if (vex) render();
 }
 
@@ -366,15 +385,14 @@ function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
   if (parts[0] && s.explode) parts[0].explode = Math.max(0, sc.mod);
   if (parts[0] && o.agonizing) parts[0].flat += sc.mod;
   for (const p of parseDamageText(o.extraDmg, parts[0]?.type) || []) parts.push({ label: 'Extra', ...p });
-  if (parts.length && what !== 'heal') {
-    for (const p of window.effects?.forRoll({ kind: 'damage', ability: sc.ability }).parts || []) parts.push({ label: p.name, n: 0, d: 0, flat: p.mod, type: parts[0].type });
-  }
-  // Vex from a weapon hit: the next attack roll has Advantage (kept in o, so "Again" repeats it)
+  if (parts.length && what !== 'heal') parts.push(...fxDamage({ kind: 'damage', ability: sc.ability }, parts[0].type));
+  // Vex from a weapon hit: the next attack roll has Advantage (kept in o, so "Again" repeats it); the roll uses up Steady Aim
   if (s.atk && what === 'cast' && o.vex == null) {
     o = { ...o, vex: !!state.vex };
     if (o.vex) { state.vex = null; queueMicrotask(render); }
+    queueMicrotask(() => window.effects?.rolled('attack'));
   }
-  const vex = !!o.vex, fx = withEffects({ kind: 'attack', ability: sc.ability }, mode, vex ? ['Vex'] : []);
+  const vex = !!o.vex, fx = withEffects({ kind: 'attack', ability: sc.ability, spell: true }, mode, vex ? ['Vex'] : []);
   const lines = [], many = r.count > 1, notes = [s.note, what !== 'heal' && parts.some(p => p.min2) ? beyondLine(['Elemental Adept']) : null];
   if (what === 'start') lines.push({});
   else if (what === 'heal') {
@@ -386,7 +404,7 @@ function castSpell(s, mode, what = 'cast', o = { ...opt('spell:' + s.name) }) {
     if (life?.supreme) notes.push('Supreme Healing: the healing dice count as their maximum.');
   } else if (s.atk && what === 'cast') {
     for (let i = 1; i <= r.count; i++) {
-      const test = d20Test(mode, r.attack, o.bless ? [{ label: 'Bless', n: 1, d: 4 }] : [], 20, fx);
+      const test = d20Test(mode, r.attack, o.bless && !onMe('Bless') ? [{ label: 'Bless', n: 1, d: 4 }] : [], 20, fx);
       lines.push({ label: many ? `${unitOf(s)} ${i}` : null, test, damage: parts.length && !test.fumble ? rollDamage(parts, test.crit) : null });
     }
   } else if (parts.length) {
@@ -420,6 +438,42 @@ function slotLine(node, s, slot, none) {
   node.querySelector('footer').before(p);
 }
 
+// Attack riders that spend a feature's uses (rest.js resource ids): [id, how many]
+const RIDER_USES = { 'Superiority Die': ['superiority', 1], 'Psionic Strike': ['psiFighter', 1], 'Despairing Strike': ['despairingStrike', 1],
+  'Hand of Harm': ['focus', 1], 'Deft Strike': ['focus', 1], 'Dreadful Strike': ['dreadfulStrike', 1], 'Psychic Blades': ['bardicInspiration', 1],
+  'Touch of Death': ['channelCleric', 1], 'Arcane Jolt': ['arcaneJolt', 1] };
+const monkDC = () => 8 + (C.mods?.WIS ?? 0) + (C.profBonus || 2);
+// Stunning Strike (Monk 5): a hit with an Unarmed Strike or a Monk weapon (Simple melee, or Martial melee and Light)
+const stunning = w => (lvlRow('monk')?.lvl || 0) >= 5 && !!w && (w.unarmed || w.kind === 'melee' && (w.category === 'simple' || w.props.includes('light')));
+
+// After an attack: a line that spends uses of a feature (rest.js) for what it did, with an Undo; after: what it does
+function useLine(node, id, n, what, after = '') {
+  const R = window.resources, res = () => R?.list().find(x => x.id === id);
+  if (!node || !window.sheet?.loaded || !res()) return;
+  const p = h('p', { class: 'slot-line' });
+  const show = () => {
+    const r = res();
+    p.replaceChildren(r.left >= n ? h('button', { class: 'use', onclick: () => {
+      const before = res().used;
+      R.setUsed(id, before + n);
+      p.replaceChildren(`${what}: ${n} ${r.name} used · ${res().left} left. ${after} `, h('button', { onclick: () => { R.setUsed(id, before); show(); } }, 'Undo'));
+    } }, what, h('small', {}, ` (${n} of ${r.left} ${r.name})`)) : `${what}: no ${r.name} left.`);
+  };
+  show();
+  node.querySelector('footer').before(p);
+}
+
+// After casting a spell that helps whoever it's on (Haste, Bless, Longstrider ...): a button that puts it in the Effects
+// tray's "Spells on you", for when you are one of its targets
+function onMeLine(node, s) {
+  const t = window.effects?.spells[s.name];
+  if (!node || !window.sheet?.loaded || !t || !(typeof t.buff === 'function' ? t.buff() : t.buff)) return;
+  const b = h('button', { onclick: () => {
+    b.replaceWith(window.effects.castOnSelf(s.name) ? `${s.name} is on you now (Effects tray).` : 'Choose the rest in the Effects tray.');
+  } }, "It's on me too");
+  node.querySelector('footer').before(h('p', { class: 'self-line' }, b));
+}
+
 // Casting from a spell card. A spell with a level needs a slot: with none left it asks first ("Cast anyway"); the log
 // entry then has a button to mark the slot used. A concentration spell starts concentration (the log entry can undo it).
 // If you are concentrating on another spell it asks first: switch, or cast and keep the old one (maybe you're only trying it out).
@@ -435,7 +489,7 @@ async function cast(s, slot, run) {
     if (!yes) return;
     none = true;
   }
-  const prev = fx.concentration(), go = () => { const node = run(); slotLine(node, s, slot, none); return node; };
+  const prev = fx.concentration(), go = () => { const node = run(); slotLine(node, s, slot, none); onMeLine(node, s); return node; };
   if (!s.conc) return go();
   if (prev && prev.name !== s.name) {
     const a = await fx.interrupt('Cast', `${s.name} needs concentration too, so casting it ends ${prev.name}.`, `Cast, switch to ${s.name}`);
@@ -453,9 +507,10 @@ async function cast(s, slot, run) {
 function rollTest(title, kind, mod, mode, extraDice = [], ability = null, skill = null, purpose = null) {
   const more = purpose === 'concentration' && hasFeat('War Caster') ? ['War Caster'] : [];
   const fx = withEffects({ kind: kind === 'Save' ? 'save' : 'check', ability, skill }, mode, more), test = d20Test(mode, mod, extraDice, null, fx);
-  log({ title, tag: [kind, fx.tag], lines: [{ test }], notes: [beyondLine(more)],
+  const node = log({ title, tag: [kind, fx.tag], lines: [{ test }], notes: [beyondLine(more)],
     again: m => rollTest(title, kind, mod, m, extraDice, ability, skill, purpose), test: true, mode });
   document.dispatchEvent(new CustomEvent('test-rolled', { detail: { kind, ability, skill, title, total: test.total, autoFail: test.autoFail.length > 0, purpose } }));
+  return node;
 }
 
 function rollExpr(expr) {
@@ -492,7 +547,7 @@ h('b', { class: 'v' }, x.shown));
 
 function testView(t) {
   const faces = t.rolls.map((v, i) => d20Face(v, (i !== t.kept ? 'dropped ' : '') + (v === 20 ? 'nat20' : v === 1 ? 'nat1' : '')));
-  const extras = t.extra.flatMap(x => [h('span', { class: 'op' }, '+'), ...x.rolls.map(v => dieChip({ v, d: x.d, shown: v })), h('small', { class: 'xl' }, x.label)]);
+  const extras = t.extra.flatMap(x => [h('span', { class: 'op' }, x.sign < 0 ? '−' : '+'), ...x.rolls.map(v => dieChip({ v, d: x.d, shown: v })), h('small', { class: 'xl' }, x.label)]);
   const fxBits = t.fxParts.flatMap(p => [h('span', { class: 'op' }, p.mod < 0 ? '−' : '+'), h('span', { class: 'mod fx' }, Math.abs(p.mod)), h('small', { class: 'xl' }, p.name)]);
   return h('div', { class: 'test' }, faces, h('span', { class: 'op' }, t.bonus < 0 ? '−' : '+'), h('span', { class: 'mod' }, Math.abs(t.bonus)),
     extras, fxBits, h('span', { class: 'op' }, '='), h('span', { class: 'total', 'data-count': t.total }, t.total),
@@ -500,20 +555,22 @@ function testView(t) {
       t.nat === 20 ? h('span', { class: 'flag nat' }, 'Natural 20') : t.nat === 1 ? h('span', { class: 'flag low' }, 'Natural 1') : null);
 }
 
-function damageView(dmg, heal) {
+// what: what the total is, when it isn't damage or healing ("damage taken off" ...)
+function damageView(dmg, heal, what) {
   const rows = dmg.parts.map(p => h('div', { class: 'part' + (p.alt ? ' savage' : '') },
     p.label ? h('span', { class: 'pl' }, p.label) : null,
+    p.sign < 0 ? h('span', { class: 'flat' }, '−') : null,
     p.dice.map(dieChip),
     p.alt ? h('span', { class: 'alt', title: 'Savage Attacker: the other roll' }, `(${sum(p.alt.map(x => x.shown))})`) : null,
     p.flat && (!dmg.plain || !p.dice.length) ? h('span', { class: 'flat' }, fmt(p.flat)) : null,
-    p.dice.length && (p.flat || dmg.parts.length > 1) ? h('span', { class: 'pt' }, '= ' + p.total) : null,
+    p.dice.length && (p.flat || dmg.parts.length > 1) ? h('span', { class: 'pt' }, '= ' + (p.total < 0 ? '−' + -p.total : p.total)) : null,
     p.type ? h('i', { class: 'ty' }, p.type) : null));
   const byType = {};
   for (const p of dmg.parts) byType[p.type || ''] = (byType[p.type || ''] || 0) + p.total;
   const split = Object.keys(byType).length > 1 ? Object.entries(byType).map(([t, v]) => `${v} ${t}`).join(' + ') : '';
   return h('div', { class: 'dmg' + (heal ? ' heal' : '') }, rows,
     h('div', { class: 'dsum' }, h('span', { class: 'total', 'data-count': dmg.total }, dmg.total),
-      h('span', { class: 'what' }, dmg.plain ? 'total' : heal ? dmg.parts[0].type : dmg.crit ? 'damage (critical: dice doubled)' : 'damage'), split ? h('small', {}, split) : null));
+      h('span', { class: 'what' }, what || (dmg.plain ? 'total' : heal ? dmg.parts[0].type : dmg.crit ? 'damage (critical: dice doubled)' : 'damage')), split ? h('small', {}, split) : null));
 }
 
 function entryView(e) {
@@ -526,16 +583,16 @@ function entryView(e) {
   if (e.dc) li.append(h('div', { class: 'dc' }, h('b', {}, `DC ${e.dc.dc}`), ` ${D.rules.abilities[e.dc.save]} save`, e.dc.half ? ' · half damage on a success' : ''));
   for (const l of e.lines) {
     li.append(h('div', { class: 'line' }, l.label ? h('span', { class: 'ln' }, l.label) : null,
-      l.test ? testView(l.test) : null, l.damage ? damageView(l.damage, l.heal) : null,
+      l.test ? testView(l.test) : null, l.damage ? damageView(l.damage, l.heal, l.what) : null,
       e.dc?.half && l.damage ? h('div', { class: 'half' }, `On a successful save: ${Math.floor(l.damage.total / 2)}`) : null));
   }
-  if (e.lines.length > 1 && e.lines.some(l => l.damage)) {
+  if (e.lines.length > 1 && e.lines.some(l => l.damage) && !e.noTotal) {
     li.append(h('div', { class: 'grand' }, tests.length ? 'Total if all hit: ' : 'Total: ', h('b', {}, sum(e.lines.map(l => l.damage?.total ?? 0)))));
   }
   for (const n of e.notes || []) if (n) li.append(n instanceof Node ? n : h('p', { class: 'note' }, n));
   li.append(...e.extra || []);
   // "Again" repeats the roll exactly; the other buttons switch between normal, Advantage and Disadvantage
-  li.append(h('footer', {}, h('button', { onclick: () => e.again(e.mode) }, '↻ Again'),
+  li.append(h('footer', {}, e.again ? h('button', { onclick: () => e.again(e.mode) }, '↻ Again') : null,
     e.test ? [[null, 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']].filter(([m]) => m !== (e.mode || null))
       .map(([m, label]) => h('button', { onclick: () => e.again(m) }, label)) : null));
   return li;
@@ -614,7 +671,7 @@ function attackView() {
     mastery ? h('p', { class: 'mastery' }, h('b', {}, `Mastery: ${cap(w.mastery)}. `), D.masteryProperties[w.mastery],
       s.mastery ? null : h('i', {}, ' (switched off below)')) : null,
     s.notes.map(([feat, text]) => h('p', { class: 'mastery' }, h('b', {}, `${feat}: `), text)),
-    effectsNote({ kind: 'attack', ability: s.ability, arms: s.arms }),
+    effectsNote({ kind: 'attack', ability: s.ability, arms: s.arms, weapon: !!s.w }),
     vexNote(),
     h('div', { class: 'chips' }, s.toggles.map(t => [chip(t.label, t.on ?? o[t.id], async () => {
       const on = !(t.on ?? o[t.id]);
@@ -680,7 +737,7 @@ function spellView() {
   const concNote = s.conc && cur && h('p', { class: 'fxnote conc' }, cur.name === s.name ? h('b', {}, `You are concentrating on ${s.name}.`)
     : [h('b', {}, `Concentrating on ${cur.name}: `), `casting ${s.name} would end it (you'll be asked first).`]);
   const chips = [];
-  if (s.atk) chips.push(chip('Bless +1d4', o.bless, () => { o.bless = !o.bless; render(); }));
+  if (s.atk && !onMe('Bless')) chips.push(chip('Bless +1d4', o.bless, () => { o.bless = !o.bless; render(); }));
   if (s.name === 'Eldritch Blast') chips.push(chip(`Agonizing Blast (+${sc.mod})`, o.agonizing, () => { o.agonizing = !o.agonizing; render(); }, 'Eldritch Invocation: add your spellcasting modifier to the damage'));
   // Life Domain: on by default, since it applies to every healing spell cast with a slot
   const life = s.heal && lifeHealing(s, slot), disciple = life && o.disciple !== false ? life.disciple : 0;
@@ -705,7 +762,7 @@ function spellView() {
     s.level > 0 && RS ? h('p', { class: 'slotleft' + (RS.slotsLeft(slot) ? '' : ' none') },
       RS.slotTotal(slot) ? `Level ${slot} slots: ${RS.slotsLeft(slot)} of ${RS.slotTotal(slot)} left` : `No level ${slot} slots on your sheet`,
       s.level < slot && !scales && !(s.heal && s.up) ? ' (a higher slot does nothing more for this spell)' : '') : null,
-    s.atk ? effectsNote({ kind: 'attack', ability: sc.ability }) : null,
+    s.atk ? effectsNote({ kind: 'attack', ability: sc.ability, spell: true }) : null,
     concNote,
     chips.length ? h('div', { class: 'chips' }, chips) : null,
     s.dmg ? h('div', { class: 'extras' }, field('Extra damage', 'extraDmg', o, 'e.g. 1d6', '8em')) : null,
@@ -731,12 +788,13 @@ function spellText(text) {
 function testList(rows, kind, extraDice) {
   return h('div', { class: 'tests' }, rows.map(r => {
     const fx = withEffects({ kind: kind === 'Save' ? 'save' : 'check', ability: r.ability, skill: r.skill }, null);
-    const flag = [fx.mod ? fmt(fx.mod) : null, fx.mode === 'adv' ? 'Adv' : fx.mode === 'dis' ? 'Dis' : null, fx.autoFail.length ? 'Fails' : null].filter(Boolean).join(' ');
+    const flag = [fx.mod ? fmt(fx.mod) : null, ...fx.dice.map(diceBit), fx.mode === 'adv' ? 'Adv' : fx.mode === 'dis' ? 'Dis' : null,
+      fx.autoFail.length ? 'Fails' : null].filter(Boolean).join(' ');
     const roll = m => rollTest(r.label, kind, r.mod, m, extraDice(), r.ability, r.skill);
     return h('div', { class: 'trow' },
       h('button', { class: 'tmain', onclick: () => roll(null) },
         h('span', { class: 'iname' }, r.label, r.sub ? h('small', {}, r.sub) : null),
-        flag ? h('span', { class: 'fxflag', title: fx.tag || fx.parts.map(p => p.name).join(', ') || fx.autoFail.join(', ') }, flag) : null,
+        flag ? h('span', { class: 'fxflag', title: fx.tag || [...fx.parts, ...fx.dice].map(p => p.name).join(', ') || fx.autoFail.join(', ') }, flag) : null,
         h('b', {}, fmt(r.mod))),
       h('button', { class: 'tadv', title: 'Roll with Advantage', onclick: () => roll('adv') }, 'Adv'),
       h('button', { class: 'tdis', title: 'Roll with Disadvantage', onclick: () => roll('dis') }, 'Dis'));
@@ -744,16 +802,19 @@ function testList(rows, kind, extraDice) {
 }
 
 // Under a card: what the active effects do to this roll
+const diceBit = x => `${x.sign < 0 ? '−' : '+'}${x.n}d${x.d}`;
 function effectsNote(roll) {
   const fx = withEffects(roll, null);
-  const bits = [...fx.parts.map(p => `${fmt(p.mod)} (${p.name})`), fx.tag, ...fx.autoFail.map(n => `automatic failure (${n})`), ...fx.notes].filter(Boolean);
+  const bits = [...fx.parts.map(p => `${fmt(p.mod)} (${p.name})`), ...fx.dice.map(x => `${diceBit(x)} (${x.name})`), fx.tag,
+    ...fx.autoFail.map(n => `automatic failure (${n})`), ...fx.notes].filter(Boolean);
   return bits.length ? h('p', { class: 'fxnote' }, h('b', {}, 'Effects: '), bits.join(' · ')) : null;
 }
 
 function checkView() {
-  const o = opt('check'), mods = C.mods || {};
-  const extra = () => o.guidance ? [{ label: 'Guidance', n: 1, d: 4 }] : [];
-  return [needSheet(), h('div', { class: 'chips' }, chip('Guidance +1d4', o.guidance, () => { o.guidance = !o.guidance; render(); })),
+  // Guidance on you (Effects tray) adds its die to its own skill, so the chip goes
+  const o = opt('check'), mods = C.mods || {}, guided = onMe('Guidance');
+  const extra = () => o.guidance && !guided ? [{ label: 'Guidance', n: 1, d: 4 }] : [];
+  return [needSheet(), guided ? null : h('div', { class: 'chips' }, chip('Guidance +1d4', o.guidance, () => { o.guidance = !o.guidance; render(); })),
     h('h4', {}, 'Abilities'),
     testList(Object.entries(D.rules.abilities).map(([ab, full]) => ({ label: full, ability: ab, mod: mods[ab] ?? 0 })), 'Check', extra),
     h('h4', {}, 'Skills'),
@@ -761,9 +822,9 @@ function checkView() {
 }
 
 function saveView() {
-  const o = opt('save');
-  return [needSheet(), h('div', { class: 'chips' }, chip('Bless +1d4', o.bless, () => { o.bless = !o.bless; render(); })),
-    testList((C.saves || []).map(s => ({ label: s.name, sub: s.ability, ability: s.ability, mod: s.mod })), 'Save', () => o.bless ? [{ label: 'Bless', n: 1, d: 4 }] : [])];
+  const o = opt('save'), blessed = onMe('Bless');
+  return [needSheet(), blessed ? null : h('div', { class: 'chips' }, chip('Bless +1d4', o.bless, () => { o.bless = !o.bless; render(); })),
+    testList((C.saves || []).map(s => ({ label: s.name, sub: s.ability, ability: s.ability, mod: s.mod })), 'Save', () => o.bless && !blessed ? [{ label: 'Bless', n: 1, d: 4 }] : [])];
 }
 
 function initView() {
@@ -823,13 +884,16 @@ for (const b of $('rollActions').children) b.addEventListener('click', () => { s
 $('clearLog').addEventListener('click', () => $('rollLog').replaceChildren(h('li', { class: 'empty' }, 'Your rolls show up here. Roll as often as you like.')));
 for (const ev of ['character-change', 'effects-change', 'resources-change', 'sheet-state-change']) document.addEventListener(ev, render);
 document.addEventListener('sheet-loaded', () => { state.vex = null; });
-// For other scripts, e.g. the Becoming Marble page's "Roll CON save"
+// For other scripts, e.g. the Becoming Marble page's "Roll CON save" (bonus: added to the save, Indomitable), and the
+// Rest tab's feature buttons (rest.js): log(entry) adds a log entry and returns its element; rollDamage(parts) rolls dice
 window.roller = {
-  save(ability, title, purpose = null) {
+  save(ability, title, purpose = null, bonus = 0) {
     const s = (C.saves || []).find(x => x.ability === ability);
     setOpen(true);
-    rollTest(title || `${D.rules.abilities[ability]} save`, 'Save', s?.mod ?? 0, null, [], ability, null, purpose);
-  }
+    return rollTest(title || `${D.rules.abilities[ability]} save`, 'Save', (s?.mod ?? 0) + bonus, null, [], ability, null, purpose);
+  },
+  log: e => { setOpen(true); return log(e); },
+  rollDamage
 };
 render();
 })();

@@ -83,7 +83,7 @@ const spellLines = () => [...document.querySelectorAll('[data-field^="Spells "]'
 (async () => { try {
   document.body.prepend(pre);
   const C = window.character;
-  ok(Object.values(DND.classes).every(c => c.subclasses?.length >= 4) && DND.classes.fighter.subclasses.length === 7 && DND.classes.wizard.subclasses.length === 9,
+  ok(Object.values(DND.classes).every(c => c.subclasses?.length >= 4) && DND.classes.fighter.subclasses.length === 11 && DND.classes.wizard.subclasses.length === 13,
     'every class has its subclasses: ' + Object.entries(DND.classes).map(([k, c]) => `${k} ${c.subclasses.length}`).join(', '));
 
   // ---- 1. Fighter 2 -> 3: the subclass cards, Battle Master with three maneuvers and Student of War
@@ -251,11 +251,85 @@ const spellLines = () => [...document.querySelectorAll('[data-field^="Spells "]'
   ok(/Divine Soul: also Cleric spells/.test(body().textContent) && /Bless/.test(body().querySelector('.lu-pick')?.parentElement.textContent || ''), 'Divine Soul: Cleric list offered, Bless always prepared');
   pickSpell('prepared', 'Guiding Bolt');
   await apply();
-  ok(['Bless', 'Guiding Bolt'].every(n => spellLines().includes(n)) && /Divine Magic \(Divine Soul\): Law - Bless/.test(val('Features and Traits')),
+  ok(['Bless', 'Guiding Bolt'].every(n => spellLines().includes(n)) && /Divine Magic \(Divine Soul\): When you gain or replace .* Law: Bless always prepared\./.test(val('Features and Traits')),
     'Bless and a Cleric spell on the lines, the affinity written: ' + spellLines().join(', ') + ' | ' + val('Features and Traits').split('\n').find(l => l.startsWith('Divine Magic')));
   const fav = window.resources.list().find(r => r.name === 'Favored by the Gods');
   ok(fav && fav.max === 1 && fav.back === 'short' && !window.resources.list().some(r => r.name === 'Unearthly Recovery'), 'Rest tab: Favored by the Gods (short), no Unearthly Recovery before 18');
   ok(!C.beyond.length && !errors.length, 'Divine Soul: nothing beyond the rules, no errors: ' + errors.join(' | '));
+
+  // ---- 11. The older books' subclasses: names on the sheet, the ▾ note, a Fighting Style from a subclass
+  ok(Object.values(DND.classes).filter(c => c.subclasses.some(s => s.legacy)).length === 12 && DND.classes.cleric.subclasses.filter(s => s.legacy).length === 7,
+    '2014 subclasses for all 12 classes (7 Cleric domains): ' + Object.entries(DND.classes).map(([k, c]) => `${k} ${c.subclasses.filter(s => s.legacy).length}`).join(', '));
+  ok([['monk', 'Monk 3 (Kensei)', 'Way of the Kensei'], ['warlock', 'Warlock 5 (Hexblade)', 'The Hexblade'], ['wizard', 'Wizard 6 (Chronurgy)', 'Chronurgy Magic'],
+    ['barbarian', 'Barbarian 3 (Wild Magic)', 'Path of Wild Magic'], ['cleric', 'Cleric 3 (Order)', 'Order Domain'], ['wizard', 'Wizard 3 (War Magic)', 'War Magic'],
+    ['ranger', 'Ranger 3 (Beast Master)', 'Beast Master'], ['barbarian', 'Barbarian 3 (Beast)', 'Path of the Beast']].every(([k, t, n]) => window.calc.subclassOf(k, t, '', '')?.name === n),
+    'short names on the sheet: Kensei, Hexblade, Chronurgy, Wild Magic, Order, War Magic (Beast Master and Beast apart)');
+  await loadSheet((add, box) => basics(add, box, { cls: 'Bard 2', scores: { CHA: 16 } }));
+  await openLevelUp(); step('Features');
+  const swords = card('College of Swords');
+  swords.parentElement.querySelector('.lu-more')?.click(); await wait(10);
+  ok(/2014 rules:/.test(body().textContent), "the ▾ of an older book's subclass says so");
+  card('College of Swords').click(); await wait(10);
+  ok(!!card('Dueling') && !!card('Two-Weapon Fighting') && !card('Archery'), 'College of Swords: Dueling or Two-Weapon Fighting only');
+  card('Dueling').click(); await wait(10);
+  await apply(); await wait(300);
+  ok(C.feats.includes('Dueling') && !C.beyond.length && !document.querySelector('.ask'), 'a Fighting Style feat from a subclass is within the rules: ' + C.feats.join(', '));
+
+  // ---- 12. The Hexblade: expanded spells offered (name-only ones too), armor and weapons, the curse in the roller
+  await loadSheet((add, box) => basics(add, box, { cls: 'Warlock 2', scores: { CHA: 16 }, spells: true }));
+  await openLevelUp(); step('Features'); card('The Hexblade').click(); await wait(10);
+  step('Spells');
+  const prep = () => [...W().querySelectorAll('[data-pick="prepared"] .lu-spell b')].map(b => b.textContent);
+  ok(/Your patron adds 10 spells/.test(body().textContent) && ['Blur', 'Branding Smite', 'Wrathful Smite', 'Shield'].every(n => prep().includes(n)) && !prep().includes('Blink'),
+    'Hexblade: level 1-2 expanded spells offered, Blink (level 3) not yet');
+  pickSpell('prepared', 'Branding Smite');
+  await apply();
+  ok(spellLines().includes('Branding Smite') && /Martial weapons/.test(Object.values(window.fields).join('\n')), 'a name-only expanded spell on its line; Martial weapons written');
+  attackWith('Longsword');
+  ok(!!rbtn("Hexblade's Curse +2"), "the attack card offers Hexblade's Curse (+PB)");
+  ok(window.resources.list().some(r => r.name === "Hexblade's Curse" && r.back === 'short'), "Rest tab: Hexblade's Curse once per Short Rest");
+
+  // ---- 13. The Genie: the kind's spells, picked now and read back from the sheet later
+  await loadSheet((add, box) => basics(add, box, { cls: 'Warlock 2', scores: { CHA: 16 }, spells: true }));
+  await openLevelUp(); step('Features'); card('The Genie').click(); await wait(10);
+  card('Efreeti').click(); await wait(10);
+  step('Spells');
+  ok(['Scorching Ray', 'Burning Hands', 'Phantasmal Force'].every(n => prep().includes(n)) && !prep().includes('Fog Cloud'), 'Efreeti: fire spells offered, not the Marid\'s');
+  await apply();
+  ok(/Genie's Vessel \(The Genie\): A Tiny vessel.* Efreeti: A fire genie/.test(val('Features and Traits')), "Genie's Vessel keeps its text, then the kind");
+  type('ClassLevel', 'Warlock 4 (The Genie)');
+  await openLevelUp(); step('Spells');
+  ok(prep().includes('Fireball') && !prep().includes('Sleet Storm'), 'Warlock 5: the Efreeti\'s Fireball, read from the sheet');
+  await cancel();
+
+  // ---- 14. Rune Knight runes, Death Domain's Reaper, the Scout's Expertise, Storm Aura's line
+  await loadSheet((add, box) => basics(add, box, { cls: 'Fighter 2' }));
+  await openLevelUp(); step('Features'); card('Rune Knight').click(); await wait(10);
+  ok(/Runes0 \/ 2/.test(body().textContent) && opt('Hill Rune').disabled && !opt('Fire Rune').disabled, 'Rune Knight: two runes, Hill Rune greyed out below 7');
+  opt('Fire Rune').click(); opt('Stone Rune').click();
+  await apply();
+  ok(/\nFire Rune: Carried/.test(val('Features and Traits')), 'runes written one per line');
+  attackWith('Longsword');
+  ok(!!rbtn("Giant's Might 1d6"), "the attack card offers Giant's Might 1d6");
+  await loadSheet((add, box) => basics(add, box, { cls: 'Cleric 2', scores: { WIS: 16 }, spells: true }));
+  await openLevelUp(); step('Features'); card('Death Domain').click(); await wait(10);
+  const reaper = () => [...W().querySelectorAll('.lu-spell b')].map(b => b.textContent);
+  ok(reaper().includes('Chill Touch') && !reaper().includes('Fire Bolt'), 'Reaper: Necromancy cantrips from any list');
+  [...W().querySelectorAll('.lu-spell')].find(b => b.querySelector('b').textContent === 'Chill Touch').click(); await wait(10);
+  step('Spells');
+  ok(['False Life', 'Ray of Sickness', 'Blindness/Deafness', 'Ray of Enfeeblement'].every(n => body().textContent.includes(n)), 'Death Domain spells always prepared at 3');
+  await apply();
+  ok(spellLines().includes('Chill Touch') && spellLines().includes('False Life'), 'Reaper cantrip and domain spells on the lines: ' + spellLines().join(', '));
+  await loadSheet((add, box) => basics(add, box, { cls: 'Rogue 2', skills: [['Nature', false, '+2'], ['Survival', false, '+1']] }));
+  await openLevelUp(); step('Features'); card('Scout').click(); await wait(10);
+  await apply();
+  ok(val('Nature') === '+6' && val('Survival') === '+5', 'Survivalist: Nature and Survival with Expertise: ' + val('Nature') + ' ' + val('Survival'));
+  await loadSheet((add, box) => basics(add, box, { cls: 'Barbarian 2' }));
+  await openLevelUp(); step('Features'); card('Path of the Storm Herald').click(); await wait(10);
+  card('Tundra').click(); await wait(10);
+  await apply();
+  ok(/Storm Aura \(Path of the Storm Herald\): While raging .* Tundra: Creatures of your choice/.test(val('Features and Traits')), 'Storm Aura keeps its text, then the environment');
+  ok(!C.beyond.length && !errors.length, '2014 subclasses: nothing beyond the rules, no errors: ' + errors.join(' | '));
 } catch (err) { log('ERROR', err.stack); }
 document.title = 'DONE';
 })();

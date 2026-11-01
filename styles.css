@@ -373,9 +373,10 @@ main {
     }
 }
 
-/* keep the sheet clear of the zoom box */
+/* keep the sheet clear of the zoom box and the turn bar */
 body:has(.page) main {
     padding-left: 76px;
+    padding-bottom: calc(var(--turnbar, 0px) + 60px);
 }
 
 /* ---- Dice roller panel (roller.js) ---------------------------------------- */
@@ -1486,10 +1487,10 @@ body.roller-open main {
 #effects {
     position: fixed;
     left: 14px;
-    bottom: 14px;
+    bottom: calc(var(--turnbar, 0px) + 12px);
     z-index: 20;
-    width: min(290px, calc(100vw - 28px));
-    max-height: max(140px, calc(100vh - var(--head, 60px) - 340px));
+    width: min(300px, calc(100vw - 28px));
+    max-height: max(140px, calc(100vh - var(--head, 60px) - var(--turnbar, 0px) - 330px));
     overflow-y: auto;
     background: rgba(31, 27, 24, .95);
     border: 1px solid var(--line);
@@ -1602,6 +1603,12 @@ body.roller-open main {
         box-shadow: 0 0 0 1px #8a867e;
     }
 
+    /* a class feature that lasts (Raging, Dodging ...): a diamond */
+    & .feature .fx-dot {
+        border-radius: 1px;
+        transform: rotate(45deg) scale(.9);
+    }
+
     /* concentration: a gold ring, first in the list */
     & .fx.conc {
         border: 1px solid rgba(255, 216, 107, .45);
@@ -1675,6 +1682,92 @@ body.roller-open main {
         color: var(--gold);
     }
 
+    & .fx-speed small {
+        font-size: 11px;
+    }
+
+    /* "Spells on you" / "Other effects" headings in the list */
+    & .fx-sub {
+        padding: 4px 2px 0;
+        font-size: 10.5px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    /* a spell on you: a four-pointed star (green helps, red hinders, violet = a reminder only) */
+    & .fx.spell .fx-dot {
+        width: 12px;
+        height: 12px;
+        margin-top: 3px;
+        border-radius: 0;
+        clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    }
+
+    & .fx.spell.plain .fx-dot {
+        background: #9a7ad6;
+    }
+
+    & .fx-text small.fx-meta {
+        color: #d9c48a;
+    }
+
+    /* a spell's text: two lines until you click it */
+    & .fx.spell .fx-text {
+        cursor: pointer;
+
+        & small:not(.fx-meta) {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+    }
+
+    & .fx.spell.full .fx-text small:not(.fx-meta) {
+        display: block;
+    }
+
+    & .fx-tabs {
+        display: flex;
+        margin: 0 10px 6px;
+
+        & button {
+            flex: 1;
+            padding: 4px 6px;
+            border: 1px solid var(--line);
+            background: none;
+            font-size: 12px;
+            color: var(--muted);
+            cursor: pointer;
+
+            &:first-child {
+                border-radius: 6px 0 0 6px;
+            }
+
+            &:last-child {
+                border-left: 0;
+                border-radius: 0 6px 6px 0;
+            }
+
+            &.on {
+                border-color: var(--accent);
+                background: var(--accent);
+                color: #fff;
+            }
+        }
+    }
+
+    & .fx-link {
+        padding: 0;
+        border: 0;
+        background: none;
+        font-size: 12px;
+        color: var(--gold);
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
     & .fx-form {
         display: flex;
         flex-direction: column;
@@ -1733,6 +1826,327 @@ body.roller-open main {
     }
 }
 
+/* ---- Turn bar (turn.js), docked under the sheet ------------------------------------ */
+#turnbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 14;
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 7px 14px;
+    background: linear-gradient(180deg, #2a2420, var(--bar));
+    border-top: 2px solid var(--accent);
+    box-shadow: 0 -6px 22px rgba(0, 0, 0, .45);
+    transition: right .25s ease;
+
+    body.roller-open & {
+        right: var(--roller-w);
+    }
+
+    body:not(:has(.page)) &,
+    &:empty {
+        display: none;
+    }
+
+    & button,
+    & input {
+        font: inherit;
+        color: inherit;
+    }
+
+    & button {
+        cursor: pointer;
+    }
+
+    & .tb-head {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 4px;
+
+        & b {
+            font-size: 11px;
+            font-weight: normal;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--gold);
+        }
+    }
+
+    /* "Turn" and the fold button */
+    & .tb-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        align-self: stretch;
+    }
+
+    & .tb-new {
+        padding: 3px 11px;
+        border: 1px solid rgba(255, 216, 107, .55);
+        border-radius: 999px;
+        background: rgba(255, 216, 107, .06);
+        font-size: 12px;
+        white-space: nowrap;
+        color: var(--gold);
+
+        &:hover {
+            background: rgba(255, 216, 107, .16);
+        }
+    }
+
+    /* Move and Attacks: two cards side by side, one above the other when there isn't room */
+    & .tb-segs {
+        flex: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    & .tb-seg {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        min-width: 0;
+        padding: 4px 9px;
+        border: 1px solid rgba(255, 216, 107, .13);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, .025);
+    }
+
+    & .tb-move {
+        flex: 1 1 auto;
+    }
+
+    & .tb-attacks {
+        flex: 0 1 auto;
+    }
+
+    & .tb-main {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+    }
+
+    & .tb-lbl {
+        margin-right: 2px;
+        font-size: 11px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    & .tb-of {
+        font-size: 12.5px;
+        white-space: nowrap;
+        color: var(--muted);
+    }
+
+    & .tb-why {
+        font-size: 11px;
+        line-height: 1.3;
+        color: #8f8275;
+    }
+
+    & .tb-btn {
+        padding: 2px 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #2b2622;
+        font-size: 12px;
+
+        &:hover:not(:disabled) {
+            border-color: var(--gold);
+        }
+
+        &:disabled {
+            opacity: .35;
+            cursor: default;
+        }
+
+        &.on {
+            border-color: var(--gold);
+            background: rgba(255, 216, 107, .14);
+            color: var(--gold);
+        }
+    }
+
+    /* feet left: the box fills with gold as a gauge */
+    & .tb-num {
+        --fill: 1;
+        width: 3.2em;
+        padding: 1px 2px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: linear-gradient(90deg, rgba(255, 216, 107, .2) calc(var(--fill) * 100%), var(--bg) 0);
+        font-size: 16px;
+        font-weight: bold;
+        text-align: center;
+        color: var(--gold);
+        -moz-appearance: textfield;
+        appearance: textfield;
+
+        &:focus {
+            outline: 2px solid var(--gold);
+            outline-offset: -1px;
+        }
+
+        &::-webkit-inner-spin-button,
+        &::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    }
+
+    & .tb-chips {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+        margin-left: 4px;
+    }
+
+    /* joined buttons: − | Dash ×N | +, and −1 | +1 */
+    & .tb-pair {
+        display: inline-flex;
+
+        & > button:hover {
+            position: relative;
+            z-index: 1;
+        }
+
+        & > * + * {
+            margin-left: -1px;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        & > *:has(+ *) {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+    }
+
+    /* the Dash count between − and +: the same width for ×0 ... ×99 */
+    & .tb-dash {
+        justify-content: center;
+        min-width: 6em;
+        font-variant-numeric: tabular-nums;
+        cursor: default;
+    }
+
+    /* a feature: a gold pill, lit while it is on this turn */
+    & .tb-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        border: 1px solid rgba(255, 216, 107, .4);
+        border-radius: 999px;
+        background: none;
+        font-size: 12px;
+        white-space: nowrap;
+        color: var(--gold);
+        transition: background .15s, box-shadow .15s;
+
+        & small {
+            min-width: 15px;
+            padding: 0 4px;
+            border-radius: 999px;
+            background: rgba(255, 216, 107, .16);
+            font-size: 10.5px;
+            text-align: center;
+        }
+
+        &:is(button):not(.on, :disabled):hover {
+            background: rgba(255, 216, 107, .1);
+        }
+
+        &:disabled {
+            opacity: .35;
+            cursor: default;
+        }
+
+        &.on {
+            border-color: var(--gold);
+            background: linear-gradient(180deg, rgba(255, 216, 107, .3), rgba(201, 154, 46, .22));
+            box-shadow: 0 0 8px rgba(255, 216, 107, .3);
+            color: #fff3c4;
+        }
+
+        &.spent {
+            opacity: .5;
+        }
+
+        &.stand {
+            border-color: rgba(224, 90, 78, .7);
+            color: #f2b0a8;
+        }
+    }
+
+    /* an attack left = a gold diamond; a used one = an empty outline */
+    & .tb-pips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0 5px;
+    }
+
+    & .tb-pip {
+        width: 12px;
+        height: 12px;
+        padding: 0;
+        border: 1.5px solid #7d6a55;
+        border-radius: 2px;
+        background: none;
+        transform: rotate(45deg);
+        transition: background .15s, border-color .15s, box-shadow .15s;
+
+        &.on {
+            border-color: var(--gold);
+            background: linear-gradient(135deg, #ffe08a, #c99a2e);
+            box-shadow: 0 0 6px rgba(255, 216, 107, .45);
+        }
+    }
+
+    & .tb-fold {
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: none;
+        font-size: 11px;
+        color: var(--muted);
+
+        &:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+    }
+
+    /* folded: just the counters (and Dash) */
+    &.folded {
+        & .tb-chips > .tb-chip,
+        & .tb-why {
+            display: none;
+        }
+    }
+}
+
+@media (max-width: 760px) {
+    body.roller-open #turnbar {
+        right: 0;
+    }
+}
+
 @keyframes fxPulse {
     50% {
         box-shadow: 0 0 1px rgba(255, 216, 107, .2);
@@ -1745,8 +2159,9 @@ body.roller-open main {
     }
 }
 
-/* "Concentrating on Bless now. Undo" in a roll log entry */
-.roll .conc-line {
+/* "Concentrating on Bless now. Undo" in a roll log entry, and "It's on me too" after casting a buff */
+.roll .conc-line,
+.roll .self-line {
     margin: 6px 0 0;
     font-size: 12px;
     color: var(--gold);
@@ -3400,6 +3815,55 @@ body.roller-open main {
 
     &.empty .rleft {
         color: #e07a6e;
+    }
+}
+
+/* what a feature's uses can be spent on: small gold buttons under its row, the cost in a badge */
+.racts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: -1px 0 4px 10px;
+}
+
+#roller .ract {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 4px 2px 9px;
+    border: 1px solid rgba(255, 216, 107, .35);
+    border-radius: 999px;
+    background: none;
+    font-size: 11.5px;
+    color: var(--gold);
+    cursor: pointer;
+
+    &:hover {
+        border-color: var(--gold);
+        background: rgba(255, 216, 107, .1);
+    }
+
+    & small {
+        padding: 0 6px;
+        border-radius: 999px;
+        background: rgba(255, 216, 107, .16);
+        font-size: 10px;
+        font-weight: bold;
+    }
+
+    &:not(:has(small)) {
+        padding-right: 9px;
+    }
+
+    /* not enough uses left: it still works (it asks first) */
+    &.short {
+        border-color: var(--line);
+        color: var(--muted);
+
+        & small {
+            background: rgba(224, 122, 110, .18);
+            color: #e07a6e;
+        }
     }
 }
 

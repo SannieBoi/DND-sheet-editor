@@ -27,7 +27,7 @@ The Killing Marble tab is a mechanic for my own campaign, so not much detail wil
 4. [Level up](#4-level-up)
 5. [Rolling](#5-rolling)
 6. [Rests, spell slots and class features](#6-rests-spell-slots-and-class-features)
-7. [Effects and concentration](#7-effects-and-concentration)
+7. [Effects, spells on you and your turn](#7-effects-spells-on-you-and-your-turn)
 8. [Killing Marble](#8-killing-marble)
 9. [Tips](#9-tips)
 10. [Not included yet](#10-not-included-yet)
@@ -85,7 +85,7 @@ The gold **Level up** button in the header asks if you're sure, then opens a win
 1. **Class:** level up a class you have, or pick a new one (multiclassing; it says what the class is about). If you don't meet the 13+ requirement it warns you but still lets you (your DM may allow it).
 2. **Hit Points:** the fixed value for your Hit Die is picked; press Roll to roll instead (as often as you like). Your Constitution modifier is added, and Dwarven Toughness / Draconic Resilience too. You also gain a Hit Die.
 3. **Features:** every new feature with a short description, and any choices it needs: subclass, Ability Score Improvement or a feat, Fighting Style, skills, Expertise, Weapon Mastery, Eldritch Invocations, Metamagic, and so on.
-   - **Subclasses:** every one from the Player's Handbook (2024), Heroes of Faerûn, Ravenloft: The Horrors Within, Arcana Unleashed and D&D Beyond Drops, the Divine Soul sorcerer from Xanathar's Guide to Everything, plus the Artificer's and the Blood Hunter's orders, as cards to search or filter by book. Pick one and its features, choices (Battle Master maneuvers, Arcane Shots, blood curses, mutagens, magic item plans ...), always-prepared spells and limited uses are filled in for you, now and at later levels. Picks you already have on the sheet are greyed out. "Another subclass" is for anything else: type its name and add its features yourself.
+   - **Subclasses:** every one from the Player's Handbook (2024), Heroes of Faerûn, Ravenloft: The Horrors Within, Arcana Unleashed and D&D Beyond Drops, plus the Artificer's and the Blood Hunter's orders, and the subclasses of the older (2014) books that the 2024 books haven't replaced (Xanathar's, Tasha's, the Sword Coast Adventurer's Guide, Wildemount, Fizban's, Dragonlance, Bigby's, the 2014 Player's Handbook and Dungeon Master's Guide: Hexblade, Echo Knight, Twilight Domain and many more), as cards to search or filter by book. The older ones follow the 2024 rules for them: features they gave below level 3 come at level 3, and a Cleric domain's level 8 Divine Strike or Potent Spellcasting is the class's Blessed Strikes instead (the ▾ on the card says so). Pick one and its features, choices (Battle Master maneuvers, Arcane Shots, blood curses, mutagens, magic item plans ...), always-prepared spells and limited uses are filled in for you, now and at later levels. Picks you already have on the sheet are greyed out. "Another subclass" is for anything else: type its name and add its features yourself.
    - **Feats** come from the free rules, the Player's Handbook (2024), Forge of the Artificer (Dragonmarks), Heroes of Faerûn and Lorwyn. Search them or filter by book. Feats you can't take yet are greyed out with the reason (level, ability score, armor training, Spellcasting). A feat's own choices appear under it: ability score, tools, spells (Fey Touched, Shadow Touched, Ritual Caster), skills or Expertise, damage type, weapon mastery. Tough and Boon of Fortitude raise your Max HP, Speedy your Speed, Resilient adds the saving throw, armor feats tick your armor training.
 4. **Spells** (spellcasters only): new cantrips and prepared spells (Wizards: spellbook spells too), an optional swap of one cantrip and one spell, always-prepared spells, and the new spell slots. Subclasses that cast work the same: Eldritch Knight and Arcane Trickster (Wizard spells), Warrior of the Mystic Arts (Sorcerer spells) and the Blood Hunter's Order of the Profane Soul (Warlock spells, Pact Magic slots).
 5. **Review:** every change with a tick box. Untick anything you don't want. Nothing touches the sheet until you press **Apply to sheet**; Cancel throws it all away. After applying, the window stays open as a list of what changed until you close it. Choices you skipped are listed under "Still to choose".
@@ -122,6 +122,17 @@ Click **Roll** on the right edge to open or close the panel. Pick a tab, pick wh
 
 The **Rest** tab in the roller shows, as dots: your spell slots, class features with limited uses (Rage, Second Wind, Action Surge, Channel Divinity, Wild Shape, Bardic Inspiration, Focus Points, Sorcery Points, Lay On Hands, Luck Points from the Lucky feat ...), subclass uses (Superiority Dice, Psionic Energy Dice, Bladesong, Warding Flare, Healing Light, Blood Maledict, Hybrid Transformation ...), species traits with limited uses (Breath Weapon, Adrenaline Rush, Fey Step, Fury of the Small, Shifting ...) and your Hit Point Dice. Click a full dot to use one, an empty dot to get it back. Big pools (Lay On Hands) have a number box with − and +.
 
+- **Using a feature:** under a feature, buttons spend its uses on what it does, with the cost in a small badge. Monk: Flurry of Blows, Patient Defense, Step of the Wind, Stunning Strike, Deflect Attacks, Redirect. Fighter: Second Wind, Tactical Mind, Action Surge, Indomitable. Barbarian: Rage. Paladin: Lay On Hands, Divine Sense. Cleric: Divine Spark, Turn Undead. Sorcerer: Metamagic, Font of Magic (slots to points and back), Innate Sorcery. Also Wild Shape, Bardic Inspiration, Hunter's Mark (Favored Enemy), Magical Cunning, Battle Master maneuvers and many subclass options. A click:
+  - asks what it needs first (Divine Spark: heal or harm; Action Surge: which action; how many Lay On Hands points; which slot),
+  - spends the uses,
+  - writes it in the roll log with its dice, save DC and an **Undo**.
+  - It also does what the feature does:
+    - Flurry of Blows, Action Surge and the War Priest attack add attacks to the **turn bar**; Step of the Wind and Adrenaline Rush add a Dash; Rabbit Hop, and Rage (Instinctive Pounce, Barbarian 7) or Second Wind (Tactical Shift, Fighter 5), add movement.
+    - Rage, Patient Defense (Dodging), Innate Sorcery, Sacred Weapon, Bladesong and others show in the Effects tray while they last. While Raging, the attack cards switch Rage on.
+    - Hunter's Mark and Shadow Arts' Darkness start concentration (asking first if you already concentrate on something).
+  - Healing and Temporary HP get a button in the log ("Heal yourself: HP 50 → 64"), so your HP only change if you click it.
+  - Not enough uses left? It asks, and "Use anyway" leaves the count as it is.
+  - After an attack, the log offers to spend what the attack used: a Monk's **Stunning Strike** (with its DC), or a switched-on Superiority Die, Psionic Strike or Dreadful Strike.
 - **Slots:** the total for each level is the number in your sheet's slots box (else your class table). Used slots go where your sheet keeps them: the "Slots Expended" box (the classic sheet; type in it and the tool follows), the "expended" checkboxes on the official 2024 sheet, or, on a sheet with neither, inside the PDF.
 - **Hit Point Dice:** the same idea. On the classic sheet the big Hit Dice box (under "Total") holds the dice you have left, e.g. "3d8"; on the official 2024 sheet the "spent" box holds how many you spent. Type in them and the tool follows; a rest writes them for you.
 - **Short Rest (1 hour) or Long Rest (8 hours):** from the Rest tab or the **Rest** button in the header. A window you can drag opens; nothing changes until you press Apply.
@@ -129,19 +140,33 @@ The **Rest** tab in the roller shows, as dots: your spell slots, class features 
   - **Long Rest:** full HP, Temporary HP gone, all Hit Point Dice and spell slots back, every feature back, Exhaustion goes down by 1, Death Saving Throws are cleared, and it offers to end concentration (ticked if the spell would have run out during 8 hours).
   - Every change is listed with a tick box: untick what you don't want. After Apply the window stays open as a list of what changed until you close it. One Undo (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) takes the whole rest back.
 
-## 7. Effects and concentration
+## 7. Your turn, effects and spells on you
 
-The **Effects** tray (bottom left) lists everything that changes your rolls. The roller applies them for you.
+The **turn bar** (docked at the bottom of the sheet) shows what is left of your turn:
 
-- **+ Add:** a condition (Poisoned, Prone, Exhaustion 2 ...), your own buff or debuff (advantage, disadvantage, a bonus, a penalty, a speed change, or just a reminder), or a spell you're concentrating on. × removes an effect.
+- **Move:** the feet you have left of your Speed (with every effect applied: Haste doubles it, Grappled makes it 0 ...); the box fills with gold as a gauge. **−5** / **+5**, or type the number. **+** adds a Dash (your Speed once more) and **−** takes one back (greyed out with no Dash to take back); between them, **Dash ×0, ×1 …** counts this turn's Dashes, including a feature's (Cunning Action, Step of the Wind ...), which its own button takes back.
+- **Attacks:** one gold diamond per attack you can make with the Attack action (Extra Attack, a Fighter's Two Extra Attacks, Thirsting Blade on the sheet, +1 for Haste, only 1 while Slowed). Each weapon attack you roll in the roller uses one ("Again" and "Damage only" don't). Click a diamond to use it or give it back; **+1** adds an attack, **−1** takes it back. Nothing stops you rolling past 0.
+- **Feature buttons** (gold pills, only the ones your character has; click again to take it back):
+  - Movement: **Feline Agility** (Tabaxi: your Speed doubled this turn; dimmed until a turn in which you don't move), **Cunning Action** (Rogue: a Bonus Action Dash), **Steady Aim** (Rogue: Speed 0, Advantage on your next attack roll), **Ambusher's Leap** (Gloom Stalker: +10 ft), **Step of the Wind**, **Adrenaline Rush** (Orc), **Rabbit Hop** (Harengon), **Large Form** (Goliath), Expeditious Retreat while you have it, and **Difficult terrain** (each 5 ft costs 10). While you are Prone, moving costs double (crawling) and **Stand up** spends half your Speed. Charger adds 10 ft to each Dash; with Speedy, Difficult Terrain costs nothing extra after a Dash.
+  - Attacks: **Action Surge**, **Flurry of Blows**, **Martial Arts** (Monk's Bonus Action strike), **Light weapon** (two Light weapons on the sheet: the extra attack), **War Priest**, **Pole Strike**, **Hew**, **Horde Breaker**, a Soulknife's second blade, a Minotaur's Goring Rush, a Centaur's Charge.
+  - Buttons with a number spend uses like the Rest tab's buttons (the number is how many you have left); pressed again they are taken back with the roll log's Undo.
+- **New turn** fills everything up again, and ends what lasts only until your next turn (Dodging, Fighting Spirit, Steady Aim). ▾ next to "Turn" hides the feature buttons. These counters aren't saved in the PDF.
+
+The **Effects** tray (bottom left, above the turn bar) lists everything that changes your rolls, Speed or AC. The roller applies them for you.
+
+- **+ Add**, tab **Effect or condition:** a condition (Poisoned, Prone, Exhaustion 2 ...), a class feature that lasts (Raging, Dodging, Bladesong ...: the Rest tab's buttons add these for you), your own buff or debuff (advantage, disadvantage, a bonus, a penalty, a speed change, or just a reminder), or a spell you're concentrating on. × removes an effect.
+- **+ Add**, tab **Spell on you:** a spell someone cast on you (Haste from the cleric, Longstrider, Bless, Bane, Slow, Hold Person ...), with who cast it and what they chose (Guidance's skill, Hex's ability, Enlarge or Reduce). About fifty spells work automatically: Speed, AC, attacks per turn, Advantage, Disadvantage, dice added to or taken off your rolls (Bless +1d4, Bane −1d4, Enlarge +1d4 weapon damage). Any other spell, or a name that isn't in the rules, is listed as a reminder. The same spell twice doesn't add up: the new one replaces the old one. Click a spell to read all of its text.
+  - Cast it on yourself? Tick "I cast it on myself and concentrate on it", or press **It's on me too** in the roll log after casting it. It goes away when your concentration on it ends.
+  - While Bless or Guidance is on you, the roller's own Bless / Guidance switches are hidden (the die is already added).
 - **Concentration** shows first, with a gold ring. Casting a concentration spell from a spell card starts it (the log line has an Undo).
 - The tool never blocks you and never ends concentration on its own; it asks first. You're asked when you:
   - cast another concentration spell (switch, or keep the old one),
   - add Incapacitated, Paralyzed, Petrified, Stunned or Unconscious,
   - turn Rage on,
   - lower your Current or Temp HP on the sheet: it offers the Constitution save (DC 10 or half the damage). You can correct the damage first. If the save fails, it asks whether to end concentration.
-  - drop to 0 HP.
-- Effects and concentration are saved inside the downloaded PDF.
+  - drop to 0 HP,
+  - add a spell on you that makes you Incapacitated (Hold Person, Sleep, Hideous Laughter ...).
+- Effects, spells on you and concentration are saved inside the downloaded PDF.
 
 ## 8. Killing Marble
 
