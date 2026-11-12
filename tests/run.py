@@ -27,8 +27,11 @@ def page_for(test):
 
 def run(test, browser):
     page = page_for(test)
+    # a test can ask for a window size on a line of its own: "// window: 1400,900"
+    size = re.search(r'^// window: (\d+,\d+)$', test.read_text(encoding='utf-8'), re.M)
+    extra = ['--window-size=' + size.group(1)] if size else []
     for attempt in range(2):  # now and then the browser hands back an empty page; try once more
-        dom = subprocess.run([browser, '--headless=new', '--disable-gpu', '--allow-file-access-from-files', '--virtual-time-budget=60000',
+        dom = subprocess.run([browser, '--headless=new', '--disable-gpu', '--allow-file-access-from-files', '--virtual-time-budget=60000', *extra,
                               '--dump-dom', page.as_uri()], capture_output=True, text=True, encoding='utf-8', timeout=300).stdout
         m = re.search(r'<pre id="out">(.*?)</pre>', dom, re.S)
         if m:

@@ -382,6 +382,9 @@ body:has(.page) main {
 /* ---- Dice roller panel (roller.js) ---------------------------------------- */
 :root {
     --roller-w: 380px;
+    /* the whole panel: wider when the rolls have their own column (body.roll-side, roller.js; --log-w is that column) */
+    --log-w: 340px;
+    --roller-full: var(--roller-w);
     --gold: #ffd86b;
     --panel: #1f1b18;
     --card: #2b2622;
@@ -391,7 +394,7 @@ body:has(.page) main {
 }
 
 body.roller-open main {
-    padding-right: calc(var(--roller-w) + 16px);
+    padding-right: calc(var(--roller-full) + 16px);
 }
 
 #roller {
@@ -400,7 +403,7 @@ body.roller-open main {
     right: 0;
     bottom: 0;
     z-index: 15;
-    width: var(--roller-w);
+    width: var(--roller-full);
     display: flex;
     flex-direction: column;
     background: var(--panel);
@@ -536,23 +539,174 @@ body.roller-open main {
     }
 }
 
+/* "What do I need to roll?" (roller.js setGuide): a switch above the tabs */
+#rollGuide {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    transition: color .2s, background .2s;
+
+    &:hover {
+        color: var(--ink);
+    }
+
+    & input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+        padding: 0;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    & .sw {
+        position: relative;
+        flex: none;
+        width: 34px;
+        height: 19px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--card);
+        transition: background .2s, border-color .2s;
+    }
+
+    & .sw::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: transform .2s, background .2s;
+    }
+
+    & input:focus-visible+.sw {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
+    }
+
+    & input:checked+.sw {
+        border-color: var(--gold);
+        background: var(--accent);
+    }
+
+    & input:checked+.sw::after {
+        transform: translateX(15px);
+        background: var(--gold);
+    }
+
+    &:has(input:checked) {
+        background: rgba(255, 216, 107, .05);
+        color: var(--gold);
+    }
+}
+
 #rollPick {
     flex: 0 1 auto;
     max-height: 56%;
     overflow-y: auto;
     padding: 4px 14px 14px;
-    border-bottom: 1px solid var(--line);
+}
+
+/* the line between the buttons and the rolls: drag it to resize the rolls (roller.js); in the column view it is the
+   panel's left edge */
+#logGrip {
+    position: relative;
+    z-index: 2;
+    flex: none;
+    height: 11px;
+    margin: -5px 0;
+    cursor: row-resize;
+    touch-action: none;
+    outline: none;
+
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 5px;
+        height: 1px;
+        background: var(--line);
+        transition: background .15s, box-shadow .15s;
+    }
+
+    &::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 3px;
+        width: 38px;
+        height: 5px;
+        margin-left: -19px;
+        border: 1px solid #6b5f55;
+        border-radius: 999px;
+        background: var(--panel);
+        transition: border-color .15s, background .15s;
+    }
+
+    &:hover::before,
+    &.drag::before,
+    &:focus-visible::before {
+        background: var(--gold);
+        box-shadow: 0 0 8px rgba(255, 216, 107, .45);
+    }
+
+    &:hover::after,
+    &.drag::after,
+    &:focus-visible::after {
+        border-color: var(--gold);
+        background: #5a4a2c;
+    }
+}
+
+/* while dragging: no text selection, the resize cursor everywhere */
+body.log-dragging {
+    user-select: none;
+    cursor: row-resize;
+
+    &.roll-side {
+        cursor: col-resize;
+    }
+}
+
+/* resized (roller.js): the rolls keep their height (--log-h), the buttons get the rest */
+#roller.log-sized {
+    & #rollPick {
+        flex: 1 1 0;
+        max-height: none;
+        min-height: 60px;
+    }
+
+    & #rollLog {
+        flex: 0 1 var(--log-h, 300px);
+        min-height: 80px;
+    }
 }
 
 #logHead {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 6px;
     padding: 8px 14px 4px;
     font-size: 11px;
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--muted);
+
+    & span {
+        flex: 1;
+    }
 
     & button {
         padding: 2px 8px;
@@ -562,6 +716,128 @@ body.roller-open main {
         font-size: 11px;
         letter-spacing: 0;
         text-transform: none;
+
+        &:hover {
+            border-color: #8a7a6b;
+            color: var(--ink);
+        }
+    }
+
+    & #logSide {
+        display: grid;
+        place-items: center;
+        padding: 2px 6px;
+
+        & svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.4;
+        }
+
+        /* the icon shows the other layout: columns while stacked, rows in the column view */
+        & .rows {
+            display: none;
+        }
+    }
+}
+
+/* the rolls in their own column, left of the buttons (wide screens only) */
+@media (min-width: 761px) {
+    body.roll-side {
+        /* the column's width, leaving the sheet at least 280px when the window is narrower */
+        --log-col: clamp(240px, var(--log-w), calc(100vw - var(--roller-w) - 280px));
+        --roller-full: calc(var(--roller-w) + var(--log-col));
+
+        & #roller {
+            display: grid;
+            grid-template-columns: var(--log-col) minmax(0, 1fr);
+            grid-template-rows: auto auto minmax(0, 1fr);
+        }
+
+        & #logHead {
+            grid-column: 1;
+            grid-row: 1;
+            align-self: stretch;
+            padding: 8px 14px;
+            border-right: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+
+        & #rollLog {
+            grid-column: 1;
+            grid-row: 2 / 4;
+            min-height: 0;
+            padding-top: 10px;
+            border-right: 1px solid var(--line);
+        }
+
+        & #rollGuide {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        & #rollActions {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        & #rollPick {
+            grid-column: 2;
+            grid-row: 3;
+            max-height: none;
+            min-height: 0;
+        }
+
+        & #logGrip {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            /* measured from inside the panel's 2px border: the line (::before) lies on that border */
+            left: -6px;
+            width: 10px;
+            height: auto;
+            margin: 0;
+            cursor: col-resize;
+
+            &::before {
+                left: 4px;
+                right: auto;
+                top: 0;
+                bottom: 0;
+                width: 2px;
+                height: auto;
+                background: none;
+            }
+
+            &::after {
+                left: 2px;
+                top: 50%;
+                width: 6px;
+                height: 38px;
+                margin: -19px 0 0;
+            }
+        }
+
+        & #logSide {
+            color: var(--gold);
+            border-color: #8a6f2a;
+
+            & .cols {
+                display: none;
+            }
+
+            & .rows {
+                display: inline;
+            }
+        }
+    }
+}
+
+@media (max-width: 760px) {
+    #logSide {
+        display: none !important;
     }
 }
 
@@ -1340,6 +1616,207 @@ body.roller-open main {
     }
 }
 
+/* What to roll (the "What do I need to roll?" switch): the dice to roll and what to add, no results */
+.roll.guide {
+    border-style: dashed;
+    border-color: #8a6f2a;
+    border-left: 3px solid var(--gold);
+
+    & .need .face {
+        width: 40px;
+        height: 40px;
+
+        & .v {
+            margin-top: 3px;
+            font-size: 13px;
+        }
+    }
+
+    & .dneed {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+
+        & .cnt {
+            font-size: 15px;
+            color: var(--bone);
+        }
+
+        & .die {
+            width: 30px;
+            height: 30px;
+            font-size: 10.5px;
+        }
+    }
+
+    & .how {
+        margin: 6px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    & .dsum .formula {
+        font-size: 20px;
+        font-weight: 700;
+        color: #ffad94;
+    }
+
+    & .heal .dsum .formula {
+        color: #9fe3a1;
+    }
+}
+
+/* "?" on a log entry: where each number comes from (roller.js explain / whyView) */
+#roller .roll .rhead .whybtn {
+    flex: none;
+    align-self: center;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #8a6f2a;
+    border-radius: 50%;
+    background: none;
+    /* a sans-serif "?" sits in the middle of its box (the serif one leans right and low) */
+    font: bold 12px/1 Arial, Helvetica, sans-serif;
+    text-align: center;
+    color: var(--gold);
+    transition: background .15s, color .15s, box-shadow .15s;
+
+    &:hover {
+        border-color: var(--gold);
+        box-shadow: 0 0 8px rgba(255, 216, 107, .35);
+    }
+
+    &.on {
+        border-color: var(--gold);
+        background: var(--gold);
+        color: #3a2a00;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
+    }
+}
+
+.roll .whybox {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid #5a4a2c;
+    border-left: 3px solid var(--gold);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, .22);
+    font-size: 12.5px;
+    animation: slidein .2s ease-out;
+
+    & section+section {
+        margin-top: 8px;
+        padding-top: 7px;
+        border-top: 1px dashed var(--line);
+    }
+
+    & h5 {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 10px;
+        margin: 0 0 5px;
+        font-size: 11px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--gold);
+    }
+
+    & .wsum {
+        font-size: 12.5px;
+        font-weight: normal;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--bone);
+    }
+
+    & ul {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    & li {
+        display: grid;
+        grid-template-columns: minmax(3.2em, max-content) 1fr;
+        gap: 8px;
+        align-items: baseline;
+    }
+
+    & .wv {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        color: var(--gold);
+    }
+
+    & .wt {
+        min-width: 0;
+        overflow-wrap: anywhere;
+
+        & i {
+            color: var(--muted);
+        }
+
+        & small {
+            display: block;
+            font-size: 11px;
+            color: var(--muted);
+        }
+    }
+
+    & p {
+        margin: 5px 0 0;
+        font-size: 11.5px;
+        color: var(--muted);
+    }
+}
+
+/* the total you rolled, for a roll the app compares with something (roller.js totalBox) */
+.roll .total-in {
+    & form,
+    & label {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+    }
+
+    & input {
+        width: 4.5em;
+        padding: 2px 6px;
+        text-align: center;
+        font-weight: bold;
+        color: var(--gold);
+        -moz-appearance: textfield;
+        appearance: textfield;
+
+        &::-webkit-inner-spin-button,
+        &::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    }
+
+    & .use {
+        margin-left: 0;
+    }
+
+    & p {
+        display: inline;
+        margin: 0;
+    }
+}
+
 .burst {
     position: absolute;
     left: 24px;
@@ -1843,7 +2320,7 @@ body.roller-open main {
     transition: right .25s ease;
 
     body.roller-open & {
-        right: var(--roller-w);
+        right: var(--roller-full);
     }
 
     body:not(:has(.page)) &,

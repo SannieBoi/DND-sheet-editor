@@ -36,16 +36,16 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 | app/effects.js | effects tray (bottom left, above the turn bar): concentration, spells on you (`SPELLS_ON` table), conditions, class feature states (`STATES`: Raging, Dodging, Steady Aim, Large Form ...), user debuffs, providers; `effects.forRoll()` used by every roll; `speed()` / `attacks()` for the turn bar. See "Turn bar and spells on you". |
 | marble/marble-body.js | body outline JPEG as a data URI (`window.MARBLE_BODY`), needed for the PDF and file://. |
 | marble/marble.js | "Killing Marble" mode: header switch, Becoming Marble page, marble debuffs (effects provider), PDF page hook. |
-| app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table) and what they can be spent on (`ACTIONS`: buttons under each feature), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
+| app/rest.js | `window.resources`: spell slots (used/left), class features with limited uses (`RESOURCES` table; uses left written on the sheet, `TRACK_BOXES`) and what they can be spent on (`ACTIONS`: buttons under each feature), Hit Point Dice; draws the roller's Rest tab (`view()`) and the Spell tab's slot strip; the Short / Long Rest window (header "Rest" button or the tab). See "Rests and resources" below. |
 | app/turn.js | the turn bar (`#turnbar`, docked at the bottom of the sheet area, loads after rest.js): movement / attacks left, New turn, feature buttons (`FEATURES`). Sets `--turnbar` (its height: main's padding and the tray sit above it). See "Turn bar and spells on you". |
-| app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations. |
+| app/roller.js | dice roller panel (right): attack/spell/check/save/initiative/dice/rest tabs, log, animations, the "What do I need to roll?" switch (see "Roller: What to roll"), the log's "?" (see "Roller: where the numbers come from"), the resizable / side-column log (see "Roller panel layout"). |
 | app/levelup.js | "Level up" header button: confirm box, then a draggable window (Class / Hit Points / Features / Spells / Review). Writes only on Apply, through `window.sheet`. Also a new character's level 1 (`L.first`). See "Level up" below. |
 | app/maker.js | the sheet maker: "…or create a new sheet" (#newSheet, under the drop area) -> New character window (Sheet / Class / Background / Species / Abilities / Equipment / Details / Review) -> opens a blank sheet, writes it, then `levelUp.start({ key, target, picks })`. See "Sheet maker" below. |
 | app/beyond.js | "Beyond the rules": asks about `character.beyond` items (keep = writes `[DM allowed]` after the name; ignore = `sheetState.beyondIgnored`). Loads last. See "Beyond the rules" below. |
 | styles.css | all styles; dark theme tokens `--bg --bar --ink --accent --gold --panel --card --line --muted --bone --marble`; native CSS nesting. Global element/class rules leak: `header` is styled globally (use divs inside panels), and the sheet's "+ Add text" notes are `.page .note` (the roller uses `.note` too). Our own scrollbars (user, 2026-10-29: the default looked out of place): global `::-webkit-scrollbar` rules (dark red thumb, gold edge, wider on hover, gold while dragged; a brown one inside `.page`), Firefox gets `scrollbar-color` via `@supports not selector(::-webkit-scrollbar)`. Never set `scrollbar-width`/`scrollbar-color` elsewhere (only `none`): in Chromium 121+ either one switches the custom ones off for that box. Pseudo-element rules can't be nested (`&` can't stand for one). Search boxes' × is restyled too. |
 | LICENSE | MIT, "Copyright (c) 2026 SannieBoi" (the user). Covers the project's own code and the Becoming Marble rules (the user's own creation); third-party parts keep their licences (CREDITS.md). |
 | CREDITS.md, licenses/ | attributions (SRD 5.2 / 5.2.1 statements, Fan Content Policy notice for the official sheet, Killing Marble doc, libraries) and the library licence texts. |
-| tests/ | `python tests/run.py [name]` — headless Edge tests (790 checks). See Testing. |
+| tests/ | `python tests/run.py [name]` — headless Edge tests (894 checks). See Testing. |
 
 ## Globals and events
 - `window.character` — live stats, rebuilt by `refreshCharacter()` on every edit: sheet fields by `FIELD_MAP` key, plus
@@ -53,7 +53,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   critRange, weapons[{name,bonus,damage,weapon,spell,magic,calc,fields}], spells[{spell,from}], skills, saves, initiativeMod,
   beyond[{id ('feat:Name' | 'feature:<norm name>'), kind, name, why, field, at (index after the name), kept}]`. `feats` leaves out
   out-of-reach feats unless kept.
-- `window.calc` = `{ weaponAttack, spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor(classes), pactOf(classes),
+- `window.calc` = `{ weaponAttack (also returns `how`: what its numbers are made of), spellRoll, parseDice, diceText, cantripTier, fmt, WEAPONS, slotsFor(classes), pactOf(classes),
   casterOf(classEntry), subclassOf(key, classText?, subText?, featureText?), classRe(key) }` (script.js;
   slotsFor = slots per level of [{key, level, sub}]: one caster = its own table (a third caster's subclass table), several =
   caster levels (half round up, third round down), Pact slots added at their level; pactOf = Warlock slots with a third of
@@ -68,7 +68,8 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 - `window.sheetState` — saved INSIDE the PDF (Info dict key `DndSheetViewerState`, read via pdf.js `getMetadata().info.Custom`):
   `{ mode: 'default'|'marble', marble: {head,torso,rightArm,leftArm,rightLeg,leftLeg,tail, lost:{}}, effects: [user effects],
   spellsOn: [{ name, by, pick, mine }] (spells on you; key deleted when empty), extraPages,
-  concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent},
+  concentration, slotsUsed: {level: n} (all slot use, or the overflow past the official sheet's boxes), used: {resourceId: uses spent}
+  (only on sheets without a uses box, or a feature that has no line there: see "Rests and resources"),
   hitDiceSpent: {die: n}, beyondIgnored: [beyond ids answered "Ignore"] }`. Empty maps are deleted, not left as {}.
 - `window.resources` (rest.js) = `{ slots() -> [{level,total,used,left}], slotsLeft(l), slotTotal(l), useSlot(l), restoreSlot(l) (false when
   nothing to do), list() -> class features [{id,name,max,used,left,back,note}], setUsed(id, n), hitDice() -> {dice:[{die,total,spent,left}], spent, box},
@@ -89,7 +90,8 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   `sheetState.concentration` is saved in the PDF. Effect rules can target a `skill` (e.g. Stealth); the roller passes
   `skill` for skill checks, `weapon: true` for weapon / Unarmed Strike attack and damage rolls, `spell: true` for spell
   attack rolls (rule keys `weapon` / `spell` limit a rule to those).
-- `window.roller = { save(ability, title, purpose, bonus) -> log entry, log(entry) -> element, rollDamage(parts) }`,
+- `window.roller = { save(ability, title, purpose, bonus, bonusWhy) -> log entry, log(entry) -> element (entry.explain, parts' `why`: see "Roller: where the numbers come from"), rollDamage(parts) (total null
+  while What to roll is on), totalBox(label, done(n) -> text | element | null), guide (getter), setGuide(on) }`,
   `window.marble = { parts, setScore, setMode, applySpread, clearAll }`,
   `window.setStat(key, v)`, `window.getField(name)`.
 - `window.marble.hourPasses()` (the page's "An hour passes" button).
@@ -306,6 +308,72 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   spreads into an unmarbled neighbour after the hour; the normal verdict / "Apply?" flow follows). One transaction (Undo).
   One hour per click; rests don't move the marble (their window says so).
 
+## Roller: What to roll (roller.js) — decisions
+- User (2026-11-11): a "What do I need to roll?" toggle at the top of the right menu; the roll buttons then show only what
+  to roll in their output instead of rolling; "keep the names just change what the output window will show". Built as
+  `#rollGuide` (a label with a hidden checkbox `#rollGuideBox` and a `.sw` switch) above `#rollActions`; `state.guide`,
+  localStorage 'roll-guide', `#roller.guide`.
+- Nothing is rolled while it's on: `d20Test` returns `need: true, total: null, crit/fumble false` (and `critOn`, also on
+  real tests), `rollDamage` parts with `dice: []`, `total: null`; rollExpr the same (parts keep `keep`). So no code can
+  act on a hidden roll: damage is always shown (as "on a hit"), Stunning Strike / Vex buttons are offered as after a hit.
+- `log()` sets `e.guide` when the switch is on and a line has a test or damage; entryView then draws `testNeed` (the red
+  d20 face reading "d20", "2×", keep the higher/lower, bonus, extra dice, effect parts, auto-fail flag, crit range for
+  attacks) and `damageNeed` (per part: label, n× die shape, flat, type, hints from gwf/min2/reroll1/savage/explode/max/keep;
+  `formula()` sums the same dice: "1d8 + 3d6 + 4"; attack lines add "Critical Hit: 2d8 + 6d6 + 4"; a save spell
+  "half on a successful save"). No "↻ Again" on these (it would say the same); the Normal/Advantage/Disadvantage buttons
+  stay. No animation. Several beams/darts = ONE line "Each of the 5 darts".
+- Side effects stay as with a real roll (user: keep the names, only the output changes): the turn bar's attack count,
+  Steady Aim / Vex used up, slot lines, concentration, rider use lines.
+- Totals the app needs: `test-rolled` is NOT sent at roll time; a concentration save or a CON save in marble mode gets
+  `totalBox('Your total')` and sends the event with the typed number ("Change" brings the box back, sends again). The
+  Rest tab's feature entries (rest.js `rolledHp`): a rolled heal with total null gets `totalBox('Healing you rolled')`
+  -> hpLine. Not changed (outside the panel's log): the Short Rest window's Hit Point Dice, level up's HP Roll, the
+  maker's 4d6 (it has "Type them").
+
+## Roller: where the numbers come from (roller.js "?") — decisions
+- User (2026-11-12): a small "?" circle on every completed roll (and What to roll entries) that expands the log entry
+  itself, explaining where each number comes from (+STR modifier, Rage ...). Built as `.whybtn` at the end of `.rhead`
+  (after the time; gold ring, filled while open, aria-expanded) and a `.whybox` (hidden) right after the entry's lines /
+  "Total", before its notes; drawn the first time it opens. Only entries with something to explain get one (Rage from the
+  Rest tab: none).
+- Data: `log()` sets `e.why = explain(e)` when the entry is logged (the character as it was at that roll; in a try/catch so
+  the "?" never stops a roll from showing). Sections `{ head, sum, rows: [{ v, n, text, sub, ty }], notes }`:
+  the D20 Test (one for all lines: beams share it, "(each beam)"), the save DC (`e.dc.from` 'spell' | 'focus'), damage /
+  healing (lines with the same parts share one), then entry-wide notes. Roll functions pass `e.explain = { test: { head,
+  rows (they add up to the test's bonus), notes, fx (withEffects: its `advBy` / `disBy` say who gave Advantage /
+  Disadvantage) }, damage: { notes }, notes }`. Damage parts carry `why = { dice: what the dice are, sub, flat: [[value,
+  what, sub]] }` (no why: the part's label); `critWhy` names Piercer / Savage Attacks. Anything that doesn't add up gets a
+  "something else" row (the app could not trace it) instead of a wrong sum. Real rolls add "rolled 15" subs (one line only).
+- Sheet numbers: `sheetOr()` compares a number on the sheet with the rules (weaponAttack's new `how`: mod, prof, magic,
+  archery, dice, dieFrom 'weapon'|'versatile'|'martialArts'|'given', why 'finesse'|'monk'|'ranged'|'melee'|'casting').
+  Same: the rules' rows + "This matches ... on your sheet". Different: the sheet's number + "By the rules it would be
+  +7 (...). Your sheet's is 2 higher: a magic item, a feat or feature, or a mistake?". Skills / saves / Initiative typed
+  on the sheet are taken apart (`inferred`): ability modifier, then PB if it fits exactly (proficient), 2 × PB
+  (Expertise), half (Jack of All Trades, Bard 2+, checks only); else PB when the rest is bigger, plus "something else".
+  Worked-out ones say so (background skill, the first class's save proficiencies, Alert / Hare-Trigger).
+- Explained: weapon attacks (ability and why, PB, +N weapon from its name, Archery, Lycan hybrid, Extra to hit; damage
+  die and where it comes from: weapon, Versatile, Martial Arts, Unarmed Fighting / Tavern Brawler / natural weapons via
+  `unarmedDie()` -> { die, why }, Shillelagh; GWM, Dueling, Thrown, Charger, Rage, Sneak Attack, rites, subclass /
+  species riders (their dice, modifier, part of a class level, PB), smites and spell riders, True Strike, Extra damage,
+  effects), spells (spell attack / DC from castingRows, the spell's dice, cantrip growth, higher slot, + modifier,
+  Agonizing Blast, Disciple of Life, beam / dart counts), checks / saves / Initiative, the Dice tab, the Rest tab's rolls
+  (rest.js ACTIONS `roll` dice take `why`; Indomitable passes `roller.save(..., bonus, bonusWhy)`), effects in the tray.
+
+- "?" look (user, 2026-11-12: "center the ?"): `#roller .roll .rhead .whybtn`, a grid with Arial (the serif "?" sat low
+  and right). The id in the selector is needed: `#roller button { font: inherit; color: inherit }` outranks classes.
+
+## Roller panel layout (roller.js, styles.css) — decisions
+- User (2026-11-12): resize the rolls by dragging the border up/down, and a button to put the rolls left of the
+  buttons, vertical. `#logGrip` (role separator, between #rollPick and #logHead; it draws the line #rollPick's border
+  used to): drag up = taller (`#roller.log-sized`, `--log-h` on #roller: the buttons flex into the rest, min 60 px;
+  the rolls 80 px up to what leaves the buttons 60 px), Arrow Up / Down 20 px (Shift 60), Home or double-click = the
+  default (auto). `#logSide` (in #logHead, before Clear; icon shows the other layout) toggles `body.roll-side`: a grid,
+  the rolls a column on the left (head beside the switch, the log beside the tabs and buttons), the buttons keep
+  --roller-w. The grip is then the panel's left edge (col-resize; left/right drags and Arrow Left / Right set
+  `--log-w` on <html>, 240 px up to what leaves the sheet 280 px; CSS `--log-col` clamps it again on window resize).
+  `--roller-full` (the panel's width) replaces --roller-w for main's padding, #roller's width and the turn bar's right.
+  Only at 761 px or wider (narrow screens: stacked, button hidden). localStorage 'roll-side', 'roll-log-h', 'roll-log-w'.
+
 ## Turn bar and spells on you (turn.js, effects.js) — decisions
 - User (2026-10-31): "a live speed counter and attacks left per turn with a reset button for all", and in the effects a
   list of the spells on you (Haste or Longstrider from someone else). Then (same day): "more compatible with things like
@@ -399,6 +467,24 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   Maledict incl. the Ghostslayer's +1, Brand of Castigation) are class rows. Species traits with `uses` follow them
   (id 'sp:<trait>', from the trait's character level). Pact slots on a Short Rest use `calc.pactOf`
   (Warlock and/or Profane Soul).
+- Uses written on the sheet (user, 2026-11-02: "use the second window of the class features to track that", then "find a
+  suitable place on the 2014 sheet too"): `TRACK_BOXES` = features2 (official: Text55, the second Class Features column;
+  level up only writes the first) or attacksText (classic: "AttacksSpellcasting", page 1 under the attack rows; nothing
+  else writes there), multiline only. One line per resources() row, "Focus Points: 3 of 5 left (Short Rest)" (`trackLine`:
+  die notes like d8 kept, back = Short Rest / 1 back per Short Rest / Long Rest, pools "HP left"). The LINE is the truth:
+  resources() reads it (`trackRe`: "Name: N" at a line start, `\b` so "Second Wind: 1d10 ..." isn't a count; "of M" =
+  the max it was written with, so spent uses stay spent when the max grows), writeUsed() rewrites it (and drops
+  sheetState.used[id]); sheetState.used is only the fallback. `trackText` removes the rows' lines and puts them back
+  together where the first one was (first time: at the top, an empty line, then the box's other text); lines of features
+  not in the list (class box mid-typing) are left alone. `syncTrack` on character-change (not while a sheet text box has
+  focus) and on a sheet box's 'change' (fires before focusout, so the rewrite joins that box's Undo step): every write
+  joins the step that caused it, so Undo/Redo states are already in sync and replay never writes. On sheet-loaded
+  (`moveUsed`), a PDF saved with sheetState.used gets its lines (written by the load's first refresh, before the history
+  reset and the saved stamp: no Undo step, no unsaved dot) and those ids leave sheetState.used. Same-name rows get the
+  class (or species) in brackets ("Channel Divinity (Cleric)", also two Psionic Energy Dice). ACTIONS read the spent
+  count through resources(), never sheetState directly. The scan of all resource names for feat/spell names found only
+  known look-alikes (Sentinel at Death's Door, Glorious Defense) and AMBIGUOUS spell words; Guiding Bolt (Star Map),
+  Misty Step, Faerie Fire, Evard's Black Tentacles lines name spells the feature does cast.
 - Spending uses (user, 2026-10-31: "allow the monk to use his points to do shi and also track attacks in the attack
   counter, do this for all classes applicable"; "maybe rest or spells" -> the Rest tab): `ACTIONS[resource id]` in rest.js
   (schema in its comment) = small gold buttons under each feature row (cost badge; dimmed when short). A click: asks what
@@ -552,7 +638,19 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 
 ## Testing
 - The Bash tool's sandbox stops headless Edge (empty output): run the tests from the PowerShell tool.
-- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|subsweep|subclasses|species|speciessweep|heal|feats|concentration|rest|maker|beyond|ui|turn|actions`). Tests build their own PDF with pdf-lib, drop it in, force dice via a
+- `python tests/run.py` (or `run.py marble|roller|derived|levelup|official|sweep|subsweep|subclasses|species|speciessweep|heal|feats|concentration|rest|maker|beyond|ui|turn|actions|uses|guide|why|panel`).
+  why.test.js: the log's "?": a Barbarian 5 (no "?" on Rage, Greataxe numbers matching the sheet + Rage Damage, open /
+  close, Advantage from the log, a Handaxe +9 vs the rules' +7, a Longsword +1 worked out, Raging + Poisoned cancelling,
+  Athletics / Stealth Expertise / Perception "something else", a worked-out STR save, What to roll, Fireball's DC and a
+  level 5 slot, Fire Bolt at level 5, the Dice tab), then a Fighter 5's Second Wind and Indomitable's bonus.
+  panel.test.js: the "?" style, the grip (drag with PointerEvents, limits, Arrow Up, double-click), the column view
+  (layout, the sheet's padding, the left-edge grip, its width limit) and back. It asks for a 1400 x 700 window: run.py
+  reads a line `// window: W,H` in a test file (the default headless window is 756 x 488, narrow: no column view).
+  Measure the panel with its slide-in transition off (it is still moving right after the page loads).
+  guide.test.js: "What do I need to roll?": the switch, a Fighter 5's attack (nothing rolled, d20 + 7, 1d8 + 4 and the
+  crit line, still counts on the turn bar, Advantage / Disadvantage from the log, Damage only, Critical damage, Great
+  Weapon Fighting's hint), Fireball (DC, half), Magic Missile's one line, a check, a save, a concentration save's total
+  box (reports what you type), the Dice tab (kh3), Second Wind's heal box -> Heal yourself, and off again (rolls). Tests build their own PDF with pdf-lib, drop it in, force dice via a
   patched `crypto.getRandomValues` (`forced = [values]`), capture downloads by patching `URL.createObjectURL`.
 - `tests/official-2024-sheet.pdf` = the blank official sheet (from the Basic Rules index page); official.test.js reads it with
   XHR (works with --allow-file-access-from-files), fills a Wizard 4 and levels it.
@@ -575,6 +673,12 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   (Divine Spark, Turn Undead + Sear Undead, Again without spending), Ranger (Hunter's Mark concentration + Undo). In a full
   run species.test.js once stopped at 36 of 42, and subclasses.test.js once at 25 of 75 (headless time budget under load;
   alone they pass, and the next full run did too): run it again alone.
+  uses.test.js: feature uses on the sheet: a Monk on the real official sheet (lines above your own text in Text55, spent
+  from a pip / Flurry of Blows, "Focus Points: 2" typed, Undo/Redo, Monk 6 keeps 3 spent, Short Rest, the download, an
+  older PDF's sheetState.used moved to the sheet without an unsaved dot) and a Fighter on the real classic sheet
+  (BLANK_SHEETS.classic via a script tag; Attacks & Spellcasting, a "1d10" line of your own left alone). Its `type()`
+  also fires 'change' (a real browser does when you leave a changed box; the lines sync on it). The big official PDF's
+  download is waited for with wait(50), not yieldTask (that ran out the headless budget).
   rest.test.js: slot use from the log / pips / "Cast anyway", Rest tab, Short Rest (Hit Point Dice, Arcane Recovery), Long
   Rest (slots, Exhaustion, concentration), Undo/Redo of rests and of a stat change (Ctrl+Z/Y), a later tray change as its
   own step, Fighter features, unsaved dot, classic "Slots Expended" and Hit Dice boxes read/written, "1d6/8 -1" damage. roller.test.js also covers Weapon Mastery (Graze, Vex, Cleave, mastered list);
@@ -627,8 +731,9 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
 
 ## Environment gotchas (Windows)
 - Bash tool: heredocs containing apostrophes sometimes fail ("unexpected EOF"), and backslashes in them can be lost
-  (`\\` -> `\`, `\s` -> `s`) -> write a .py/.js/.html file with the Write tool, then run it. In a Bash `for` loop or `$(...)`,
-  `python` may hit the Windows Store stub: use `/c/Users/krist/AppData/Local/Python/bin/python`.
+  (`\\` -> `\`, `\s` -> `s`) -> write a .py/.js/.html file with the Write tool, then run it. `python` may hit the Windows
+  Store stub (exit code 49), in Bash and (since 2026-11-02) in PowerShell too: use `/c/Users/krist/AppData/Local/Python/bin/python`
+  (PowerShell: `& "C:\Users\krist\AppData\Local\Python\bin\python.exe" tests/run.py`).
 - Don't `git checkout` a file to undo a probe edit: it also drops your own uncommitted changes to it.
 - No node/deno; Python has no PIL. Edge: `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
 - pdf-lib text must be WinAnsi: replace − → ✓ etc. before `drawText` (see `pdfText`/`clean`).
@@ -684,5 +789,7 @@ Marble. index.html, styles.css, README.md, CREDITS.md, LICENSE stay in the root.
   Movement's other speeds are text only (Move counts the walking Speed); Aid / Heroes' Feast HP aren't written; Mage
   Armor ignores a Shield already in the sheet's AC; Resistance / Protection from Energy / Stoneskin aren't applied to
   damage taken; Haste's lethargy when it ends isn't added.
+- What to roll, not done (offered to the user): the Short Rest window's Hit Point Dice and level up's HP Roll still roll
+  for you while the switch is on (they could take a typed number instead).
 - Ideas suggested to the user and not built yet: Damage/Heal/Temp HP buttons, death saves roller, Heroic Inspiration and
   Lucky rerolls in the log, copy a roll as text, roller keyboard shortcuts, asking before loading another PDF over unsaved changes.

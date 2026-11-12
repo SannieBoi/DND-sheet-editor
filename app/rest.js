@@ -8,7 +8,10 @@
    - Spell slots: the total is the sheet's slots box for that level, else the class tables (calc.slotsFor). Used = the
      number in the sheet's "Slots Expended" box (classic sheet: "SlotsRemaining 19"), else the official sheet's
      "expended" checkboxes plus sheetState.slotsUsed[level] (on sheets with neither, all of it is there).
-   - Features: sheetState.used[id] = uses spent; the most you have comes from the class table (RESOURCES) or a species trait's `uses`.
+   - Features: the most you have comes from the class table (RESOURCES) or a species trait's `uses`. What is left is written on
+     the sheet, one line per feature ("Focus Points: 3 of 5 left (Short Rest)"), in the official sheet's second Class
+     Features column or the classic sheet's Attacks & Spellcasting box (TRACK_BOXES); a number typed there counts. Sheets
+     with neither keep the uses spent in sheetState.used[id].
    - Hit Point Dice: the total comes from your class levels (else the sheet's Hit Dice text). Spent = the official sheet's
      "spent" box, else sheetState.hitDiceSpent ({ die: count }).
    Rules (2024): a Short Rest lets you spend Hit Point Dice (each heals the die + CON modifier, at least 1); a Long Rest
@@ -242,7 +245,7 @@ const RESOURCES = [
 const BACK = { short: 'back on a Short or Long Rest', short1: '1 back on a Short Rest, all on a Long Rest', long: 'back on a Long Rest' };
 
 function resources() {
-  const out = [], two = id => ['channelCleric', 'channelPaladin'].every(x => RESOURCES.find(r => r.id === x && classLevel(r.cls) >= r.from));
+  const out = [];
   for (const r of RESOURCES) {
     let lvl = 0, row = {};
     if (r.cls) {
@@ -253,24 +256,80 @@ function resources() {
     } else if (!(C.feats || []).includes(r.feat)) continue;
     const max = r.max(lvl, row);
     if (!(max > 0)) continue;
-    const used = Math.min(max, st().used?.[r.id] || 0), note = typeof r.note === 'function' ? r.note(lvl, row) : r.note;
-    out.push({ ...r, name: r.id.startsWith('channel') && two() ? `${r.name} (${D.classes[r.cls].name})` : r.name,
-      lvl, row, max, used, left: max - used, note, back: typeof r.back === 'function' ? r.back(lvl) : r.back });
+    out.push({ ...r, lvl, row, max, note: typeof r.note === 'function' ? r.note(lvl, row) : r.note, back: typeof r.back === 'function' ? r.back(lvl) : r.back });
   }
   // species traits with limited uses (species.js / species-more.js features[].uses), from the trait's character level
   const sp = C.speciesData;
   for (const f of sp?.features || []) {
     if (!f.uses || f.lvl > (C.level || 1)) continue;
-    const id = 'sp:' + f.name, max = f.uses.n === 'PB' ? C.profBonus || 2 : f.uses.n, used = Math.min(max, st().used?.[id] || 0);
-    out.push({ id, name: f.name, species: sp.name, lvl: C.level || 1, max, used, left: max - used, note: sp.name, back: f.uses.back });
+    out.push({ id: 'sp:' + f.name, name: f.name, species: sp.name, lvl: C.level || 1, max: f.uses.n === 'PB' ? C.profBonus || 2 : f.uses.n, note: sp.name, back: f.uses.back });
+  }
+  // two of one name (Channel Divinity from Cleric and Paladin levels): the class says which, so each has its own line
+  const count = {}, box = trackBox(), text = box ? String(S.get(box) ?? '') : '';
+  for (const r of out) count[r.name] = (count[r.name] || 0) + 1;
+  for (const r of out) {
+    if (count[r.name] > 1) r.name += ` (${r.cls ? D.classes[r.cls].name : r.species})`;
+    const m = box && text.match(trackRe(r.name)); // "3 of 5 left": 2 spent, also once the most you have grows (a level up)
+    r.used = m ? Math.max(0, Math.min(r.max, (m[2] ? +m[2] : r.max) - +m[1])) : Math.min(r.max, st().used?.[r.id] || 0);
+    r.left = r.max - r.used;
   }
   return out;
 }
 function writeUsed(id, n) {
+  const box = trackBox(), rows = box ? resources() : [], r = rows.find(x => x.id === id);
+  if (r) { // its line on the sheet holds it
+    r.used = Math.max(0, Math.min(r.max, n)); r.left = r.max - r.used;
+    writeTrack(box, rows);
+    n = 0;
+  }
   const u = st().used ||= {};
   if (n > 0) u[id] = n; else delete u[id];
   if (!Object.keys(u).length) delete st().used;
 }
+
+// ---- The uses written on the sheet -------------------------------------------------------------------------
+// One line per feature with limited uses: "Focus Points: 3 of 5 left (Short Rest)". The number after the name is what is
+// left, so you can change it on the sheet ("Focus Points: 2" works too); "of 5" keeps the uses spent when the most you have
+// changes ("3 of 6 left" after a level up). The lines stay together where they are (the
+// first time at the top of the box); the rest of the box is left as it is. A line of a feature you don't have (yet) is
+// left alone too.
+// The official 2024 sheet: the second Class Features column; the classic 2014 sheet: the Attacks & Spellcasting box (page 1,
+// under the attack lines; nothing else writes there)
+const TRACK_BOXES = ['features2', 'attacksText'];
+function trackBox() {
+  if (!S.loaded) return null;
+  const f = TRACK_BOXES.map(k => S.field(k)).find(Boolean);
+  return f && S.multiline(f) ? f : null;
+}
+const TRACK_RES = new Map();
+const trackRe = name => TRACK_RES.get(name) || TRACK_RES.set(name,
+  new RegExp(`^[^\\S\\n]*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\S\\n]*:[^\\S\\n]*(\\d+)\\b(?:[^\\S\\n]*(?:of|/)[^\\S\\n]*(\\d+))?`, 'im')).get(name); // "1d10" isn't a count
+const BACK_LINE = { short: 'Short Rest', short1: '1 back per Short Rest', long: 'Long Rest' };
+const trackLine = r => `${r.name}: ${r.left} of ${r.max}${r.pool ? ' HP' : ''} left (${[/^d\d+$/.test(r.note) ? r.note : null, BACK_LINE[r.back]].filter(Boolean).join(', ')})`;
+function trackText(text, rows) {
+  if (!rows.length) return text;
+  const rest = [], mine = rows.map(trackLine);
+  let at = -1;
+  for (const l of text.split('\n')) {
+    if (rows.some(r => trackRe(r.name).test(l))) { if (at < 0) at = rest.length; } else rest.push(l);
+  }
+  if (at >= 0) return [...rest.slice(0, at), ...mine, ...rest.slice(at)].join('\n');
+  const was = rest.join('\n').trim(); // the first time: at the top, an empty line before what was there
+  return was ? [...mine, '', was].join('\n') : mine.join('\n');
+}
+function writeTrack(box, rows) {
+  const cur = String(S.get(box) ?? ''), text = trackText(cur, rows);
+  if (text !== cur) S.set(box, text);
+}
+// The lines follow the character (a level up, a feature gained, a higher modifier), in the same Undo step as what changed
+// them. Not while you type in a sheet box: when you leave it, its 'change' does it.
+function syncTrack() {
+  const box = trackBox();
+  if (box) writeTrack(box, resources());
+}
+const typing = () => !!document.activeElement?.closest?.('#pages') && document.activeElement.matches('input:not([type=checkbox]), textarea');
+document.addEventListener('character-change', () => { if (!typing()) syncTrack(); });
+document.addEventListener('change', e => { if (e.target.closest?.('#pages')) syncTrack(); });
 function setUsed(id, n) {
   const r = resources().find(x => x.id === id);
   if (!r) return false;
@@ -313,18 +372,19 @@ const ACTIONS = {
   persistentRage: [{ name: 'All Rages back', time: 'when you roll Initiative', refill: 'rage', text: 'Persistent Rage: regain all your Rage uses.' }],
   bardicInspiration: [
     { name: 'Bardic Inspiration', time: 'Bonus Action', text: (l, t) => `A creature within 60 ft gets your d${t.bardicInspirationDie}: within an hour it can add it to a D20 Test it fails.` },
-    { name: 'Cutting Words', sub: 'College of Lore', time: 'Reaction', roll: (l, t) => die(1, t.bardicInspirationDie, { what: 'off its roll' }) },
-    { name: 'Peerless Skill', sub: 'College of Lore', from: 14, time: 'after failing a check or attack roll', roll: (l, t) => die(1, t.bardicInspirationDie, { what: 'added to your roll' }) },
+    { name: 'Cutting Words', sub: 'College of Lore', time: 'Reaction', roll: (l, t) => die(1, t.bardicInspirationDie, { what: 'off its roll', why: { dice: `your Bardic Inspiration die (Bard ${l})` } }) },
+    { name: 'Peerless Skill', sub: 'College of Lore', from: 14, time: 'after failing a check or attack roll', roll: (l, t) => die(1, t.bardicInspirationDie, { what: 'added to your roll', why: { dice: `your Bardic Inspiration die (Bard ${l})` } }) },
     { name: 'One back for a slot', from: 5, cost: -1, slot: 'spend', time: 'no action', text: 'Font of Inspiration: spend a spell slot (any level) to regain one use.' }],
   channelCleric: [
     { name: 'Divine Spark', time: 'Magic action', options: ['Healing', 'Radiant', 'Necrotic'], ask: 'Heal a creature within 30 ft, or harm it?',
-      roll: (l, t, p) => die(byLevel({ 2: 1, 7: 2, 13: 3, 18: 4 }, l), 8, { flat: mod('WIS'), heal: p === 'Healing', type: String(p).toLowerCase() }),
+      roll: (l, t, p) => die(byLevel({ 2: 1, 7: 2, 13: 3, 18: 4 }, l), 8, { flat: mod('WIS'), heal: p === 'Healing', type: String(p).toLowerCase(),
+        why: { dice: `Divine Spark at Cleric ${l}`, sub: '1d8 at level 2, 2d8 at 7, 3d8 at 13, 4d8 at 18', flat: [[mod('WIS'), 'WIS modifier']] } }),
       dc: (l, t, p) => p !== 'Healing' && ['CON', spellDC(), true], text: 'Heal a creature within 30 ft, or deal Radiant or Necrotic damage to it (CON save for half).' },
-    { name: 'Turn Undead', time: 'Magic action', dc: () => ['WIS', spellDC()], roll: l => l >= 5 ? die(mod1('WIS'), 8, { type: 'radiant', label: 'Sear Undead' }) : null,
+    { name: 'Turn Undead', time: 'Magic action', dc: () => ['WIS', spellDC()], roll: l => l >= 5 ? die(mod1('WIS'), 8, { type: 'radiant', label: 'Sear Undead', why: { dice: 'Sear Undead: a d8 per point of your WIS modifier (at least one)' } }) : null,
       text: l => 'Undead of your choice within 30 ft make a WIS save or are Frightened and Incapacitated for 1 minute (until they take damage).' +
         (l >= 5 ? ' Sear Undead: each one that fails takes the Radiant damage.' : '') },
     { name: 'Preserve Life', sub: 'Life Domain', time: 'Magic action', text: l => `Restore up to ${5 * l} HP, split among Bloodied creatures within 30 ft (none above half its HP maximum).` },
-    { name: 'Radiance of the Dawn', sub: 'Light Domain', time: 'Magic action', roll: l => die(2, 10, { flat: l, type: 'radiant' }), dc: () => ['CON', spellDC(), true] },
+    { name: 'Radiance of the Dawn', sub: 'Light Domain', time: 'Magic action', roll: l => die(2, 10, { flat: l, type: 'radiant', why: { dice: 'Radiance of the Dawn', flat: [[l, 'your Cleric level']] } }), dc: () => ['CON', spellDC(), true] },
     { name: 'Invoke Duplicity', sub: 'Trickery Domain', time: 'Bonus Action' },
     { name: 'Guided Strike', sub: 'War Domain', time: 'after seeing the attack roll' }],
   wildShape: [
@@ -332,14 +392,15 @@ const ACTIONS = {
       text: l => `Become a Beast form you know for ${Math.max(1, Math.floor(l / 2))} hours; you keep your HP and mind, and can't cast spells.` },
     { name: 'Wild Companion', time: 'Magic action' },
     { name: "Land's Aid", sub: 'Circle of the Land', time: 'Magic action', dc: () => ['CON', spellDC(), true],
-      roll: l => { const n = byLevel({ 3: 2, 10: 3, 14: 4 }, l); return [die(n, 6, { type: 'necrotic', label: 'Damage' }), die(n, 6, { heal: true, label: 'One creature heals' })]; } },
+      roll: l => { const n = byLevel({ 3: 2, 10: 3, 14: 4 }, l), why = { dice: `Land's Aid at Druid ${l}`, sub: '2d6 at level 3, 3d6 at 10, 4d6 at 14' };
+        return [die(n, 6, { type: 'necrotic', label: 'Damage', why }), die(n, 6, { heal: true, label: 'One creature heals', why })]; } },
     { name: "Nature's Sanctuary", sub: 'Circle of the Land', from: 14, time: 'Magic action' },
     { name: 'Starry Form', sub: 'Circle of the Stars', time: 'Bonus Action', state: 'Starry Form' },
-    { name: 'Wrath of the Sea', sub: 'Circle of the Sea', time: 'Bonus Action', roll: () => die(mod1('WIS'), 6, { type: 'cold' }), dc: () => ['CON', spellDC()] }],
+    { name: 'Wrath of the Sea', sub: 'Circle of the Sea', time: 'Bonus Action', roll: () => die(mod1('WIS'), 6, { type: 'cold', why: { dice: 'Wrath of the Sea: a d6 per point of your WIS modifier (at least one)' } }), dc: () => ['CON', spellDC()] }],
   secondWind: [
-    { name: 'Second Wind', time: 'Bonus Action', roll: l => die(1, 10, { flat: l, heal: true }), feet: l => l >= 5 ? 'half' : 0, feetBy: 'Tactical Shift',
+    { name: 'Second Wind', time: 'Bonus Action', roll: l => die(1, 10, { flat: l, heal: true, why: { dice: 'Second Wind', flat: [[l, 'your Fighter level']] } }), feet: l => l >= 5 ? 'half' : 0, feetBy: 'Tactical Shift',
       text: l => `Regain 1d10 + ${l} HP.` + (l >= 5 ? ' Tactical Shift: you can also move up to half your Speed without Opportunity Attacks.' : '') },
-    { name: 'Tactical Mind', from: 2, time: 'after failing an ability check', roll: () => die(1, 10, { what: 'added to the check' }),
+    { name: 'Tactical Mind', from: 2, time: 'after failing an ability check', roll: () => die(1, 10, { what: 'added to the check', why: { dice: 'Tactical Mind' } }),
       text: "Add 1d10 to the check. If it still fails, the use isn't spent: Undo it in the log." }],
   actionSurge: [{ name: 'Action Surge', time: 'on your turn', ask: 'What is the extra action? (Not the Magic action.)',
     options: () => [[`Attack (+${perAction()} attacks)`, 'attack'], ['Dash', 'dash'], ['Another action', 'other']],
@@ -348,24 +409,25 @@ const ACTIONS = {
     options: () => Object.entries(D.rules.abilities).map(([ab, n]) => [n, ab]), text: l => `Roll the failed save again with +${l} (your Fighter level).` }],
   focus: [
     { name: 'Flurry of Blows', time: 'Bonus Action', attacks: l => l >= 10 ? 3 : 2, text: l => `${l >= 10 ? 'Three' : 'Two'} Unarmed Strikes (added to this turn's attacks).` },
-    { name: 'Patient Defense', time: 'Bonus Action', state: 'Dodging', roll: (l, t) => l >= 10 ? die(2, t.martialArtsDie, { temp: true }) : null,
+    { name: 'Patient Defense', time: 'Bonus Action', state: 'Dodging', roll: (l, t) => l >= 10 ? die(2, t.martialArtsDie, { temp: true, why: { dice: `Heightened Focus: two of your Martial Arts dice (Monk ${l})` } }) : null,
       text: l => 'Disengage and Dodge.' + (l >= 10 ? ' Heightened Focus: Temporary HP = two Martial Arts dice.' : '') },
     { name: 'Step of the Wind', time: 'Bonus Action', dashes: 1,
       text: l => "Disengage and Dash (your Speed is added to this turn's movement); your jump distance is doubled." + (l >= 10 ? ' You can carry a willing Large or smaller creature along.' : '') },
     { name: 'Stunning Strike', from: 5, time: 'on a hit, once per turn', dc: () => ['CON', kiDC()],
       text: 'On a failed save the target is Stunned until the start of your next turn; on a success its Speed is halved and the next attack against it has Advantage.' },
-    { name: 'Deflect Attacks', from: 3, cost: 0, time: 'Reaction', roll: l => die(1, 10, { flat: mod('DEX') + l, what: 'damage taken off' }),
+    { name: 'Deflect Attacks', from: 3, cost: 0, time: 'Reaction', roll: l => die(1, 10, { flat: mod('DEX') + l, what: 'damage taken off', why: { dice: 'Deflect Attacks', flat: [[mod('DEX'), 'DEX modifier'], [l, 'your Monk level']] } }),
       text: l => `When an attack hits you${l >= 13 ? '' : ' with Bludgeoning, Piercing or Slashing damage'}, reduce the damage by 1d10 + DEX modifier + ${l}.` },
-    { name: 'Redirect', from: 3, time: 'after Deflect Attacks took all the damage', roll: (l, t) => die(2, t.martialArtsDie, { flat: mod('DEX') }), dc: () => ['DEX', kiDC()],
+    { name: 'Redirect', from: 3, time: 'after Deflect Attacks took all the damage', roll: (l, t) => die(2, t.martialArtsDie, { flat: mod('DEX'), why: { dice: `two of your Martial Arts dice (Monk ${l})`, flat: [[mod('DEX'), 'DEX modifier']] } }), dc: () => ['DEX', kiDC()],
       text: "A creature within 5 ft (60 ft for a ranged attack) makes a DEX save or takes the damage, of the attack's type." },
     { name: 'Superior Defense', from: 18, cost: 3, time: 'start of your turn', state: 'Superior Defense' },
-    { name: 'Hand of Healing', sub: 'Warrior of Mercy', time: 'Magic action', roll: (l, t) => die(1, t.martialArtsDie, { flat: mod('WIS'), heal: true }) },
+    { name: 'Hand of Healing', sub: 'Warrior of Mercy', time: 'Magic action', roll: (l, t) => die(1, t.martialArtsDie, { flat: mod('WIS'), heal: true, why: { dice: `your Martial Arts die (Monk ${l})`, flat: [[mod('WIS'), 'WIS modifier']] } }) },
     { name: 'Darkness', sub: 'Warrior of Shadow', time: 'Magic action', cast: 'Darkness', text: 'Shadow Arts: cast Darkness without components; you can see in it.' },
     { name: 'Elemental Attunement', sub: 'Warrior of the Elements', time: 'start of your turn', state: 'Elemental Attunement' },
-    { name: 'Quivering Palm', sub: 'Warrior of the Open Hand', from: 17, cost: 4, time: 'on an Unarmed Strike hit', roll: () => die(10, 12, { type: 'force' }), dc: () => ['CON', kiDC(), true] }],
-  uncannyMetabolism: [{ name: 'Uncanny Metabolism', time: 'when you roll Initiative', refill: 'focus', roll: (l, t) => die(1, t.martialArtsDie, { flat: l, heal: true }),
+    { name: 'Quivering Palm', sub: 'Warrior of the Open Hand', from: 17, cost: 4, time: 'on an Unarmed Strike hit', roll: () => die(10, 12, { type: 'force', why: { dice: 'Quivering Palm' } }), dc: () => ['CON', kiDC(), true] }],
+  uncannyMetabolism: [{ name: 'Uncanny Metabolism', time: 'when you roll Initiative', refill: 'focus', roll: (l, t) => die(1, t.martialArtsDie, { flat: l, heal: true, why: { dice: `your Martial Arts die (Monk ${l})`, flat: [[l, 'your Monk level']] } }),
     text: l => `Regain all your Focus Points and heal a Martial Arts die + ${l}.` }],
-  wholenessOfBody: [{ name: 'Wholeness of Body', time: 'Bonus Action', roll: (l, t) => die(1, t.martialArtsDie, { flat: mod('WIS'), heal: true }) }],
+  wholenessOfBody: [{ name: 'Wholeness of Body', time: 'Bonus Action', roll: (l, t) => die(1, t.martialArtsDie, { flat: mod('WIS'), heal: true,
+    why: { dice: `your Martial Arts die (Monk ${l})`, flat: [[mod('WIS'), 'WIS modifier']] } }) }],
   layOnHands: [
     { name: 'Lay On Hands', time: 'Bonus Action', amount: true, show: 'HP', text: 'Touch a creature and restore HP from the pool.' },
     { name: 'Cure Poisoned', cost: 5, time: 'Bonus Action', text: 'Spend 5 points of the pool to end the Poisoned condition on the creature you touch.' }],
@@ -376,7 +438,7 @@ const ACTIONS = {
     { name: "Nature's Wrath", sub: 'Oath of the Ancients', time: 'Magic action', dc: () => ['STR', spellDC()] },
     { name: 'Vow of Enmity', sub: 'Oath of Vengeance', time: 'with the Attack action', state: 'Vow of Enmity' }],
   favoredEnemy: [{ name: "Hunter's Mark", time: 'Bonus Action', cast: "Hunter's Mark", text: "Cast Hunter's Mark without a spell slot (you concentrate on it)." }],
-  tireless: [{ name: 'Tireless', time: 'Magic action', roll: () => die(1, 8, { flat: mod1('WIS'), temp: true }) }],
+  tireless: [{ name: 'Tireless', time: 'Magic action', roll: () => die(1, 8, { flat: mod1('WIS'), temp: true, why: { dice: 'Tireless', flat: [[mod1('WIS'), 'WIS modifier (at least 1)']] } }) }],
   innateSorcery: [{ name: 'Innate Sorcery', time: 'Bonus Action', state: 'Innate Sorcery' }],
   sorceryPoints: [
     { name: 'Metamagic', time: 'as you cast a spell', show: 'points', ask: 'Which Metamagic option?', options: () => metamagic().map(m => [`${m.name} (${m.cost})`, m.name]),
@@ -387,27 +449,27 @@ const ACTIONS = {
   magicalCunning: [{ name: 'Magical Cunning', time: '1-minute rite', pact: true, text: () => `Regain up to ${Math.ceil((pact()?.slots || 0) / 2)} spent Pact Magic slots (half of them, round up).` }],
   warPriest: [{ name: 'Bonus Action attack', time: 'Bonus Action', attacks: 1, text: "One weapon attack or Unarmed Strike (added to this turn's attacks)." }],
   superiority: [{ name: 'Maneuver', time: 'see the maneuver', ask: 'Which maneuver?', options: () => maneuvers().map(m => m.name),
-    roll: l => die(1, byLevel({ 3: 8, 10: 10, 18: 12 }, l), { what: 'Superiority Die' }),
+    roll: l => die(1, byLevel({ 3: 8, 10: 10, 18: 12 }, l), { what: 'Superiority Die', why: { dice: `your Superiority Die (Fighter ${l})`, sub: 'd8, d10 at level 10, d12 at 18' } }),
     text: (l, t, p) => { const m = maneuvers().find(x => x.name === p), dc = 8 + Math.max(mod('STR'), mod('DEX')) + pb();
       return m ? m.text + (/\bsave\b/i.test(m.text) ? ` Save DC ${dc}.` : '') : `Spend a Superiority Die on a maneuver (save DC ${dc}).`; } }],
   psiFighter: [
-    { name: 'Protective Field', time: 'Reaction', roll: l => die(1, byLevel(PSI_D, l), { flat: mod1('INT'), what: 'damage taken off' }),
+    { name: 'Protective Field', time: 'Reaction', roll: l => die(1, byLevel(PSI_D, l), { flat: mod1('INT'), what: 'damage taken off', why: { dice: `your Psionic Energy Die (Fighter ${l})`, flat: [[mod1('INT'), 'INT modifier (at least 1)']] } }),
       text: 'When you or a creature within 30 ft takes damage, reduce it by the roll + INT modifier.' },
     { name: 'Telekinetic Movement', time: 'Magic action', text: 'Move a Large or smaller loose object or a willing creature within 30 ft up to 30 ft (free once per rest, else a die).' }],
   psiRogue: [
-    { name: 'Psi-Bolstered Knack', time: 'after failing a check you are proficient in', roll: l => die(1, byLevel(PSI_D, l), { what: 'added to the check' }),
+    { name: 'Psi-Bolstered Knack', time: 'after failing a check you are proficient in', roll: l => die(1, byLevel(PSI_D, l), { what: 'added to the check', why: { dice: `your Psionic Energy Die (Rogue ${l})` } }),
       text: 'Add the die to the check; it is spent only if you then succeed (else Undo it in the log).' },
-    { name: 'Psychic Whispers', time: 'Magic action', roll: l => die(1, byLevel(PSI_D, l), { what: 'hours of telepathy' }),
+    { name: 'Psychic Whispers', time: 'Magic action', roll: l => die(1, byLevel(PSI_D, l), { what: 'hours of telepathy', why: { dice: `your Psionic Energy Die (Rogue ${l})` } }),
       text: () => `Telepathy with up to ${pb()} creatures you can see, for that many hours (within 1 mile).` }],
   fightingSpirit: [{ name: 'Fighting Spirit', time: 'Bonus Action', state: 'Fighting Spirit', temp: l => byLevel({ 3: 5, 10: 10, 15: 15 }, l),
     text: l => `Advantage on weapon attack rolls this turn, and ${byLevel({ 3: 5, 10: 10, 15: 15 }, l)} Temporary HP.` }],
   bladesong: [{ name: 'Bladesong', time: 'Bonus Action', state: 'Bladesong' }],
   healingLight: [{ name: 'Healing Light', time: 'Bonus Action', show: 'd6s', ask: 'How many d6s?', options: (l, t, p, r) => upTo(Math.min(mod1('CHA'), r.left || mod1('CHA')), 6),
-    cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 6, { heal: true }) }],
+    cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 6, { heal: true, why: { dice: 'the Healing Light dice you chose to spend' } }) }],
   warriorOfTheGods: [{ name: 'Heal', time: 'Bonus Action', show: 'd12s', ask: 'How many d12s?', options: (l, t, p, r) => upTo(r.left || r.max, 12),
-    cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 12, { heal: true }), text: 'Spend and roll any number of the dice: you regain that many HP.' }],
+    cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 12, { heal: true, why: { dice: 'the d12s you chose to spend' } }), text: 'Spend and roll any number of the dice: you regain that many HP.' }],
   balmSummerCourt: [{ name: 'Balm of the Summer Court', time: 'Bonus Action', show: 'd6s', ask: 'How many d6s?',
-    options: (l, t, p, r) => upTo(Math.min(Math.max(1, Math.floor(l / 2)), r.left || l), 6), cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 6, { heal: true }),
+    options: (l, t, p, r) => upTo(Math.min(Math.max(1, Math.floor(l / 2)), r.left || l), 6), cost: (l, t, p) => p || 1, roll: (l, t, p) => die(p, 6, { heal: true, why: { dice: 'the d6s you chose to spend' } }),
     text: (l, t, p) => `An ally within 120 ft regains the roll in HP, and gains ${p ? p + ' ' : '1 per die in '}Temporary HP.` }],
   // species traits (their rows are 'sp:<trait>')
   'sp:Adrenaline Rush': [{ name: 'Adrenaline Rush', time: 'Bonus Action', dashes: 1, temp: () => pb(), text: () => `Dash, and gain ${pb()} Temporary HP (your Proficiency Bonus).` }],
@@ -503,9 +565,10 @@ async function useAction(r, a) {
   }
   // spend (one Undo step); `back` takes it back
   const back = [], did = [];
-  const uses = (id, n) => { const b = st().used?.[id] || 0; writeUsed(id, n); back.push(() => writeUsed(id, b)); };
+  const usedNow = id => resources().find(x => x.id === id)?.used ?? 0; // from the sheet's line, else sheetState
+  const uses = (id, n) => { const b = usedNow(id); writeUsed(id, n); back.push(() => writeUsed(id, b)); };
   S.transaction(a.name, () => {
-    if (cost && !short) uses(r.id, Math.max(0, Math.min(r.max, (st().used?.[r.id] || 0) + cost)));
+    if (cost && !short) uses(r.id, Math.max(0, Math.min(r.max, usedNow(r.id) + cost)));
     if (a.refill) { uses(a.refill, 0); did.push(`All your ${resources().find(x => x.id === a.refill)?.name || 'uses'} back.`); }
     if (slot) {
       const b = slotUsed(slot.level);
@@ -545,17 +608,21 @@ async function useAction(r, a) {
   const line = h('p', { class: 'slot-line' }, [spent, ...did].filter(Boolean).join(' ') + ' ');
   if (back.length || got) line.append(undoBtn = h('button', { onclick: undo }, 'Undo'));
   if (a.save) { // Indomitable: the save itself is the log entry
-    const node = window.roller.save(pick, `${a.name}: ${D.rules.abilities[pick]} save`, null, r.lvl);
+    const node = window.roller.save(pick, `${a.name}: ${D.rules.abilities[pick]} save`, null, r.lvl, `${a.name}: your Fighter level`);
     node?.querySelector('footer').before(line);
     return;
   }
   const dc = of(a.dc, pick), temp = of(a.temp, pick), text = actionText(r, a, pick);
   const entry = again => {
     const lines = [].concat(of(a.roll, pick) || []).filter(Boolean).map(x => ({ label: x.label || null, what: x.what, heal: !!(x.heal || x.temp),
-      damage: window.roller.rollDamage([{ label: a.name, n: x.n, d: x.d, flat: x.flat || 0, type: x.heal ? 'healing' : x.temp ? 'temporary HP' : x.type || '' }]), temp: x.temp }));
-    const hp = [healed && hpLine(healed), temp && hpLine(temp, true), ...lines.filter(l => l.heal).map(l => hpLine(l.damage.total, l.temp))];
+      damage: window.roller.rollDamage([{ label: a.name, n: x.n, d: x.d, flat: x.flat || 0, type: x.heal ? 'healing' : x.temp ? 'temporary HP' : x.type || '', why: x.why }]), temp: x.temp }));
+    // rolled healing: "Heal yourself" with the total; with "What do I need to roll?" on nothing was rolled (total null),
+    // so it asks for the total you rolled first
+    const rolledHp = l => l.damage.total != null ? hpLine(l.damage.total, l.temp) : F(l.temp ? 'hpTemp' : 'hp')
+      ? window.roller.totalBox(l.temp ? 'Temp HP you rolled' : 'Healing you rolled', n => hpLine(n, l.temp)) : null;
+    const hp = [healed && hpLine(healed), temp && hpLine(temp, true), ...lines.filter(l => l.heal).map(rolledHp)];
     return window.roller.log({ title: a.name + (label ? `: ${label}` : ''), tag: [short ? `${r.name}: none left` : cost > 0 ? `${r.name} −${cost}` : cost < 0 ? `${r.name} +${-cost}` : 'Free', a.time],
-      dc: dc ? { save: dc[0], dc: dc[1], half: dc[2] } : null, lines, notes: [text, temp ? `Temporary HP: ${temp}.` : null], noTotal: true,
+      dc: dc ? { save: dc[0], dc: dc[1], half: dc[2], from: r.id === 'focus' ? 'focus' : 'spell' } : null, lines, notes: [text, temp ? `Temporary HP: ${temp}.` : null], noTotal: true,
       extra: [...hp, again ? null : line].filter(Boolean), again: lines.length ? () => entry(true) : null });
   };
   entry(false);
@@ -873,7 +940,15 @@ $('rest').addEventListener('click', async () => {
   buttons: [{ label: 'Cancel', value: null }, { label: 'Short Rest', value: 'short' }, { label: 'Long Rest', value: 'long', primary: true }] });
   if (a) openRest(a);
 });
-document.addEventListener('sheet-loaded', () => { close(); $('rest').disabled = false; });
+// A PDF saved before the uses were written on the sheet: its lines were written from sheetState.used as it opened
+function moveUsed() {
+  const box = trackBox(), u = st().used;
+  if (!box || !u) return;
+  const text = String(S.get(box) ?? '');
+  for (const r of resources()) if (trackRe(r.name).test(text)) delete u[r.id];
+  if (!Object.keys(u).length) delete st().used;
+}
+document.addEventListener('sheet-loaded', () => { close(); $('rest').disabled = false; moveUsed(); });
 // keep the window up to date when the sheet changes (not while applying, not after)
 for (const ev of ['character-change', 'resources-change', 'effects-change', 'sheet-state-change']) {
   document.addEventListener(ev, () => { if (R && !R.applied && !win.contains(document.activeElement)) render(); });

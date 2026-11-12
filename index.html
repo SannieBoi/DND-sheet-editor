@@ -48,6 +48,9 @@
 <!-- Dice roller (filled in by roller.js) -->
 <aside id="roller" aria-label="Dice roller">
   <button id="rollerTab" title="Show or hide the dice roller" aria-controls="roller"><span>Roll</span></button>
+  <label id="rollGuide" title="For your own dice: the buttons show which dice to roll and what to add, and roll nothing">
+    <input type="checkbox" id="rollGuideBox"><span class="sw" aria-hidden="true"></span><span>What do I need to roll?</span>
+  </label>
   <nav id="rollActions">
     <button data-tab="attack"><svg viewBox="0 0 24 24"><path d="M20 3.5 9.5 14M6.5 11l6.5 6.5M8.5 15.5 4 20M20 3.5v4l-8 8M20 3.5h-4l-8 8"/></svg>Attack</button>
     <button data-tab="spell"><svg viewBox="0 0 24 24"><path d="M11 3l1.8 6.2L19 11l-6.2 1.8L11 19l-1.8-6.2L3 11l6.2-1.8zM18.5 15.5l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7z"/></svg>Spell</button>
@@ -58,7 +61,11 @@
     <button data-tab="rest" title="Spell slots, class features, Hit Point Dice and rests"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Rest</button>
   </nav>
   <section id="rollPick"></section>
-  <div id="logHead"><span>Rolls</span><button id="clearLog">Clear</button></div>
+  <div id="logGrip" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Resize the rolls (drag, or use the arrow keys; double-click to reset)"
+    title="Drag to resize the rolls · double-click to reset"></div>
+  <div id="logHead"><span>Rolls</span>
+    <button id="logSide" aria-pressed="false" title="Show the rolls in a column left of the buttons"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path class="cols" d="M6.5 2.5v11"/><path class="rows" d="M1.5 8h13"/></svg></button>
+    <button id="clearLog">Clear</button></div>
   <ol id="rollLog"><li class="empty">Your rolls show up here. Roll as often as you like.</li></ol>
 </aside>
 

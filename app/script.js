@@ -340,17 +340,20 @@ function weaponAttack(w, magic = 0, { twoHanded = false, casting = null, die = n
   const useDex = either ? dex > str : w.kind === 'ranged';
   const mod = casting ? casting.mod : useDex ? dex : str, proficient = isProficient(w);
   const archery = w.kind === 'ranged' && character.feats.includes('Archery') ? 2 : 0;
-  let dice = die || (twoHanded && w.versatile) || w.dice;
+  let dice = die || (twoHanded && w.versatile) || w.dice, dieFrom = die ? 'given' : twoHanded && w.versatile ? 'versatile' : 'weapon';
   if (monkWeapon && !die) {
     const mDie = D.classes.monk.levels[monk.level - 1].martialArtsDie, cur = dice.match(/^1d(\d+)$/);
-    if (dice === '1' || cur && +cur[1] < mDie) dice = '1d' + mDie;
+    if (dice === '1' || cur && +cur[1] < mDie) { dice = '1d' + mDie; dieFrom = 'martialArts'; }
   }
   const dmgMod = mod + magic, type = dmgType || w.dmg;
   const damage = /^\d+$/.test(dice) ? String(Math.max(0, +dice + dmgMod)) : dice + (dmgMod ? fmt(dmgMod) : '');
   const toHit = mod + (proficient ? character.profBonus : 0) + magic + archery;
   return {
     ability: casting ? casting.ability : useDex ? 'DEX' : 'STR', proficient, toHit, bonusText: fmt(toHit),
-    damage, type, text: `${damage} ${type}`, versatile: w.versatile && w.versatile + (dmgMod ? fmt(dmgMod) : '')
+    damage, type, text: `${damage} ${type}`, versatile: w.versatile && w.versatile + (dmgMod ? fmt(dmgMod) : ''),
+    // what the numbers are made of (the roller's "?"): why = why that ability; dieFrom = where the damage die comes from
+    how: { mod, prof: proficient ? character.profBonus : 0, magic, archery, dice, dieFrom,
+      why: casting ? 'casting' : either ? (w.props.includes('finesse') ? 'finesse' : 'monk') : w.kind === 'ranged' ? 'ranged' : 'melee' }
   };
 }
 
